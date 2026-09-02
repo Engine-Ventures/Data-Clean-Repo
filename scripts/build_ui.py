@@ -9,6 +9,18 @@ opened over file:// where fetch() is blocked, and because a single portable
 file is easier to hand to someone than a directory plus a server.
 
 The output is deliberately not committed: it embeds confidential deal data.
+
+This is a faithful build of the whole database, all 498 extracted rows and all
+seven stages. The deliverable the deal team asked for on 2026-09-02 is narrower
+-- the advanced-stage diligence cohort only -- so the screen is a second step
+that runs over this output rather than a second code path in here:
+
+    python scripts/build_ui.py
+    python scripts/screen_diligence.py
+
+Keeping it out of this script means the funnel, coverage and discussion rollups
+have exactly one definition (metrics.py, over the full population) and exactly
+one place that re-derives them for the cohort (screen_diligence.py).
 """
 
 from __future__ import annotations
@@ -49,7 +61,9 @@ def collect(conn: sqlite3.Connection) -> dict:
 
     meetings = [
         {"date": r["meeting_date"], "status": r["status"], "note": r["note"]}
-        for r in conn.execute("SELECT meeting_date, status, note FROM meeting ORDER BY meeting_date")
+        for r in conn.execute(
+            "SELECT meeting_date, status, note FROM meeting ORDER BY meeting_date"
+        )
     ]
     idx_of = {m["date"]: i for i, m in enumerate(meetings)}
 
@@ -78,6 +92,13 @@ def collect(conn: sqlite3.Connection) -> dict:
     discussion = {
         int(r["entity_id"]): dict(r)
         for r in conn.execute("SELECT * FROM v_entity_discussion")
+    }
+    # Latest observed stage, which the category tabs use for their "where is it
+    # now" basis. Distinct from furthest_stage_id: a company can sit in Hold
+    # after having reached Deep Diligence.
+    latest = {
+        int(r["entity_id"]): int(r["latest_stage_id"])
+        for r in conn.execute("SELECT entity_id, latest_stage_id FROM v_entity_latest_stage")
     }
 
     # Observations, compact: [meeting index, stage id, bold] per entity.
@@ -120,7 +141,7 @@ def collect(conn: sqlite3.Connection) -> dict:
                 "phantom": bool(r["is_phantom"]),
                 "phantomReason": r["phantom_reason"],
                 "furthest": f.get("furthest_stage_id"),
-                "latest": None,
+                "latest": latest.get(eid),
                 "appearances": f.get("slide_appearances") or 0,
                 "first": f.get("first_slide_date"),
                 "last": f.get("last_slide_date"),

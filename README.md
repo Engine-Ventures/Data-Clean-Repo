@@ -13,6 +13,8 @@ No interface is built yet — that decision is deliberately still open.
 ```bash
 source .venv/bin/activate          # see SETUP.md to build the venv
 python scripts/build_db.py         # data/raw/*.xlsx -> data/pipeline.db
+python scripts/build_ui.py         # data/pipeline.db -> ui/index.html
+python scripts/screen_diligence.py # screen it to the diligence cohort
 pytest                             # 69 regression tests
 ruff check .
 ```
@@ -173,10 +175,72 @@ the three gap states.
 `tests/test_merge_proposals.py` covers the canonical-name scoring and asserts
 that nothing is merged, deleted or resolved at load time.
 
+## Advanced-stage screen
+
+The deal team rescoped the deliverable on 2026-09-02 to companies that reached
+Preliminary Diligence or beyond. `src/DiligenceCompanies_EVPipeline (1).xlsx`
+is that cohort — 185 companies — and `scripts/screen_diligence.py` screens the
+built interface to match it:
+
+```bash
+python scripts/build_ui.py            # faithful full build: 498 rows, 7 stages
+python scripts/screen_diligence.py    # -> the 185-company diligence cohort
+```
+
+The screen is a second pass, not a branch inside `build_ui.py`, so the funnel,
+coverage and discussion rollups keep one definition over the full population
+(`metrics.py`) and one re-derivation for the cohort (`screen_diligence.py`).
+It is idempotent, and it does three things:
+
+- **Companies** — exactly the workbook's rows, joined on
+  `company_id == 'EV%04d' % entity_id`. A deterministic join: 184 of the 185
+  canonical names agree exactly, the one exception being `Attune Tx` →
+  `Attune Neurosciences`, an enrichment rename made in the workbook. Slide
+  names the workbook's dedup consolidated are folded into the surviving row
+  using that row's own `name_variants_on_slides`; nothing is merged on the
+  script's judgement, and unapproved `merge_proposal`s stay in the queue.
+- **Stages** — observations at Meetings This Week, Hold / Nurture and
+  NewCo / Fellows are dropped, and stages 1–3 are removed from the payload and
+  the template, so those three category tabs no longer exist on any basis.
+  24 companies in the workbook have a *latest* position in one of them (16
+  Meetings This Week, 8 Hold / Nurture); they read at their last diligence rung
+  instead, which is why the latest-position tabs still sum to 185.
+- **Re-derived counts** — `slide_appearances`, first/last seen, latest stage,
+  furthest stage and the bold counts come from the surviving observations, so
+  they read *lower* than the same fields in the workbook, which counts
+  pre-diligence weeks too: 935 observations of 1,198, 75 companies with a lower
+  week count, 150 bold appearances of 152. The funnel matches the workbook
+  exactly (182 prelim, 15 deep, 5 negotiate, 6 legal). `stage_jump` and
+  `stage_regression` items are re-derived on the screened series with ingest's
+  own rule, which drops 293 open review items to 21 — most of them asserted a
+  move into a stage the file no longer carries.
+
+One row is adjudicated by hand, in `ADJUDICATED` at the top of the script:
+entity 35 is **Eden Tech**, not the phantom `/Eden Tech`. The extractor flagged
+it as a line-wrap continuation on the strength of its leading slash and the
+workbook kept that spelling; the deal team confirmed it is a real company, so
+the screen fixes the name, clears the phantom flag and retires the
+`line_wrap_candidate` that raised it. The raw slide spelling survives as an
+alias, and the workbook itself still reads `/Eden Tech`.
+
+Two rows in the workbook have Preliminary Diligence slide history but no
+`Companies` row, so the screen cannot place them: `Level 12 Bio NewCo` (7
+appearances, likely the same company as `Level 12 Bio`/EV0250) and `Lila` (1,
+likely `Lila Sciences`/EV0028). Both sit in the workbook's own `Stage History`
+sheet. Related: `Attune Neurosci` (EV0017) and `Attune Neurosciences` (EV0080)
+are both present — a dedup the workbook did not make.
+
 ## Not done
 
-- No interface. The §8 browse/edit/worklist surface and the §9 slide generator
-  both sit on this layer; the UI shape is an open decision.
+- Read-only interface. `scripts/build_ui.py` inlines the database into
+  `ui/template.html` and writes `ui/index.html`: a single portable file with
+  four tabs — **Companies** (every company in each diligence category, on three
+  bases: latest position, ever in category, furthest reached; screened to the
+  four diligence stages, see above), **Trends**
+  (funnel, most-discussed, coverage, dwell, weekly stage mix, intake rate, and
+  the per-company trace), **Review queue**, and **Enrichment**. Editing is not
+  wired up: the §8 write surface in `src/evpipeline/validate.py` needs a server
+  to be reachable from a browser. The §9 slide generator is not built.
 - Extraction is not re-run. `bold_color` needs the PDF, and the deck holds 209
   meetings back to Aug 2021 against the 43 loaded here.
 - §7 capture — pass reasons, outcomes, sourcer, valuations, founders,
