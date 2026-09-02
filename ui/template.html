@@ -1,0 +1,1398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Deal Meeting — pipeline triage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Spline+Sans+Mono:wght@300..700&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   Anodized paper + filament ramp.
+
+   The palette is ordered, not categorical: the stage ramp runs cool to hot
+   because further down the funnel genuinely is hotter, so a wall of cells
+   reads as temperature before it reads as legend. Filament is spent on Legal
+   Diligence and destructive actions and nowhere else.
+
+   NewCo / Fellows deliberately breaks the ramp -- it is drawn as an outline
+   rather than a fill, because it is a separate pathway for internal
+   companies, not a hotter rung. Colouring it as rung 3 would assert
+   something untrue.
+   ========================================================================== */
+:root {
+  --paper:      #E7EAE6;
+  --plate:      #F6F8F5;
+  --plate-sunk: #DDE1DC;
+  --ink:        #171A18;
+  --graphite:   #6B7370;
+  --hairline:   #C6CCC5;
+
+  /* Stage ramp, index = stage_id */
+  --s1: #A4ADA9;  /* Meetings This Week  -- on the agenda, no position yet */
+  --s2: #7C919E;  /* Hold / Nurture      -- cold storage */
+  --s3: #6E8C7E;  /* NewCo / Fellows     -- off-ramp, drawn as outline */
+  --s4: #A89043;  /* Preliminary Dil     -- brass */
+  --s5: #C4762E;  /* Deep Diligence      -- copper */
+  --s6: #A2512B;  /* Negotiate / Offer   -- ember, browner */
+  --s7: #8F1508;  /* Legal / Def Docs    -- filament */
+
+  --focus: #1F5F8B;
+
+  --cell: 15px;
+  --gutter: 2px;
+  --row: 19px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #14171A;
+    --plate:      #1C2024;
+    --plate-sunk: #0F1214;
+    --ink:        #E8EBE7;
+    --graphite:   #939C98;
+    --hairline:   #2E353A;
+    --s1: #5C6663;
+    --s2: #5A7280;
+    --s3: #4F7263;
+    --s4: #B99C42;
+    --s5: #D4802F;
+    --s6: #A85234;
+    --s7: #EE3218;
+    --focus: #63B3ED;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Display face: expanded and heavy, like a machine plate. */
+h1, h2, .stat-value {
+  font-family: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  font-variation-settings: "wdth" 118, "wght" 800;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+/* Data face: dates, ids, counts, field names. */
+.mono, .eyebrow, .stat-denom, .cell-date, td.mono, th {
+  font-family: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--graphite);
+}
+
+a { color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.wrap {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 20px 96px;
+}
+
+/* ==========================================================================
+   Masthead. Every count carries its denominator, because a bare count from
+   this dataset is not quotable yet.
+   ========================================================================== */
+
+.masthead {
+  border-bottom: 2px solid var(--ink);
+  padding: 28px 0 0;
+  margin-bottom: 0;
+}
+
+.masthead-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.masthead h1 {
+  font-size: clamp(26px, 4.4vw, 46px);
+  line-height: 0.98;
+  text-transform: uppercase;
+}
+
+.masthead h1 .thin {
+  display: block;
+  font-variation-settings: "wdth" 100, "wght" 300;
+  font-size: 0.42em;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--graphite);
+  margin-top: 8px;
+}
+
+.built {
+  font-size: 10px;
+  color: var(--graphite);
+  text-align: right;
+  line-height: 1.7;
+}
+
+.vitals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  border-bottom: none;
+  margin-top: 26px;
+}
+
+.vital {
+  background: var(--plate);
+  padding: 11px 13px 13px;
+}
+
+.vital .stat-value {
+  font-size: 25px;
+  line-height: 1.1;
+  display: block;
+}
+
+.vital .stat-denom {
+  font-size: 11px;
+  color: var(--graphite);
+  font-weight: 400;
+}
+
+.vital .eyebrow { margin-top: 3px; display: block; }
+
+.vital.flag .stat-value { color: var(--s7); }
+
+/* ==========================================================================
+   THE TRACE -- the signature.
+
+   One row per company, one column per meeting in true chronological order.
+   Fill = stage. Ring = the name was bold that week. The four weeks with no
+   slide are hatched voids that cut through every row at once, so an absent
+   meeting reads as an absence rather than as a company going quiet.
+   ========================================================================== */
+
+.section {
+  padding-top: 46px;
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 10px;
+  margin-bottom: 18px;
+}
+
+.section-head h2 {
+  font-size: 17px;
+  font-variation-settings: "wdth" 112, "wght" 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.section-head p {
+  margin: 5px 0 0;
+  max-width: 62ch;
+  color: var(--graphite);
+  font-size: 12px;
+}
+
+.views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.view-btn {
+  padding: 5px 11px;
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+  font-size: 11px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  white-space: nowrap;
+}
+
+.view-btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.trace-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+}
+
+.trace {
+  min-width: 860px;
+  padding: 14px 16px 16px;
+}
+
+/* Week axis */
+.axis {
+  display: grid;
+  grid-template-columns: var(--label-w) 1fr;
+  gap: 0 12px;
+  align-items: end;
+  margin-bottom: 6px;
+}
+
+.axis-ticks {
+  display: grid;
+  gap: var(--gutter);
+  grid-template-columns: repeat(var(--weeks), minmax(0, 1fr));
+}
+
+.tick {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--graphite);
+  writing-mode: vertical-rl;
+  height: 46px;
+  line-height: 1;
+  justify-self: center;
+}
+
+.tick.absent { color: var(--s7); font-weight: 600; }
+
+.trace-row {
+  display: grid;
+  grid-template-columns: var(--label-w) 1fr;
+  gap: 0 12px;
+  align-items: center;
+  height: var(--row);
+}
+
+.trace-row:hover .row-label,
+.trace-row.is-active .row-label { color: var(--ink); }
+
+.row-label {
+  font-size: 11px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--graphite);
+  padding: 0;
+  width: 100%;
+  display: block;
+  text-align: right;
+}
+
+.trace-row.is-active { background: var(--plate-sunk); }
+
+.track {
+  display: grid;
+  gap: var(--gutter);
+  grid-template-columns: repeat(var(--weeks), minmax(0, 1fr));
+  height: 100%;
+  align-items: center;
+}
+
+.cellbox {
+  height: calc(var(--row) - 5px);
+  position: relative;
+}
+
+/* An observation. */
+.mark {
+  position: absolute;
+  inset: 0;
+  border-radius: 1px;
+}
+
+.mark[data-stage="1"] { background: var(--s1); }
+.mark[data-stage="2"] { background: var(--s2); }
+.mark[data-stage="4"] { background: var(--s4); }
+.mark[data-stage="5"] { background: var(--s5); }
+.mark[data-stage="6"] { background: var(--s6); }
+.mark[data-stage="7"] { background: var(--s7); }
+
+/* NewCo / Fellows: outline, not fill -- a separate pathway. */
+.mark[data-stage="3"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--s3);
+}
+
+/* Bold on the slide that week.
+   Two things carry it, both inside the cell. An outset ring bleeds over the
+   neighbouring weeks and the grid stops reading as discrete meetings, which
+   is the one thing this chart exists to show.
+
+   The weeks a company was merely listed are held back to 62% so the weeks it
+   was actually discussed are the vivid ones -- the rhythm of the row then
+   shows attention, not just presence. A hairline keeps it legible for anyone
+   who cannot separate the two by saturation alone. */
+.mark { opacity: 0.62; }
+
+.mark[data-bold="1"] {
+  opacity: 1;
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+/* Stage 3 already spends its box-shadow on the outline, so bold is a bar. */
+.mark[data-stage="3"] { opacity: 0.75; }
+
+.mark[data-stage="3"][data-bold="1"] {
+  opacity: 1;
+  box-shadow: inset 0 0 0 1.5px var(--s3);
+  border-bottom: 2.5px solid var(--ink);
+}
+
+/* Listed twice at one meeting: agenda column plus a thesis sub-section. */
+.mark[data-dual="1"] {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+}
+.mark[data-dual="1"]::before {
+  content: "";
+  position: absolute;
+  right: 0; top: 0;
+  border-width: 0 5px 5px 0;
+  border-style: solid;
+  border-color: transparent var(--paper) transparent transparent;
+}
+
+/* A week with no slide. Hatched, and repeated in every row so the four
+   absences read as continuous scars down the whole grid. */
+.cellbox.void {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 2px,
+    var(--hairline) 2px 3px
+  );
+}
+
+.trace-row.is-hovercol .cellbox.hot { box-shadow: 0 0 0 1px var(--focus); }
+
+/* Legend */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid var(--hairline);
+  font-size: 10.5px;
+  color: var(--graphite);
+}
+
+.legend-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+}
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.swatch i {
+  width: 11px;
+  height: 11px;
+  border-radius: 1px;
+  display: inline-block;
+  flex: none;
+}
+
+.swatch i[data-stage="3"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--s3);
+}
+.swatch i.void {
+  background-image: repeating-linear-gradient(45deg, transparent 0 2px, var(--hairline) 2px 3px);
+}
+.swatch i.ring { background: var(--s4); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.swatch i.dim  { background: var(--s4); opacity: 0.62; }
+
+/* Readout: replaces a floating tooltip, so the pointer never covers data. */
+.readout {
+  margin-top: 12px;
+  min-height: 20px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--graphite);
+}
+
+.readout b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Two-column work surface: the queue and the worklist.
+   ========================================================================== */
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 46px;
+}
+
+@media (min-width: 1080px) {
+  .split { grid-template-columns: 1.05fr 1fr; gap: 40px; }
+  .split .section { padding-top: 46px; }
+}
+
+.queue-group {
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+  margin-bottom: 8px;
+}
+
+.queue-group > summary {
+  padding: 9px 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  list-style: none;
+}
+
+.queue-group > summary::-webkit-details-marker { display: none; }
+
+.queue-group > summary::before {
+  content: "+";
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  color: var(--graphite);
+  width: 10px;
+}
+
+.queue-group[open] > summary::before { content: "\2212"; }
+
+.queue-kind {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.queue-count {
+  margin-left: auto;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--graphite);
+}
+
+.queue-note {
+  font-size: 11px;
+  color: var(--graphite);
+}
+
+.queue-list {
+  border-top: 1px solid var(--hairline);
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.queue-item {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  padding: 8px 13px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11.5px;
+}
+
+.queue-item:last-child { border-bottom: none; }
+
+.conf {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--graphite);
+  padding-top: 1px;
+}
+
+.conf.high { color: var(--s7); font-weight: 600; }
+
+.merge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.merge .from { text-decoration: line-through; color: var(--graphite); }
+.merge .arrow { color: var(--graphite); font-family: "Spline Sans Mono", monospace; }
+.merge .to { font-weight: 600; }
+
+.queue-detail {
+  color: var(--graphite);
+  font-size: 10.5px;
+  margin-top: 2px;
+}
+
+/* Worklist */
+.wl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.wl th {
+  text-align: left;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  font-weight: 500;
+  padding: 0 8px 7px 0;
+  border-bottom: 1px solid var(--ink);
+  white-space: nowrap;
+}
+
+.wl td {
+  padding: 7px 8px 7px 0;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+}
+
+.wl tbody tr:hover { background: var(--plate); }
+
+.wl .name-btn {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 0;
+}
+
+.wl .name-btn:hover { text-decoration: underline; }
+
+.tier {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+
+.tier.adv { border-color: var(--s7); color: var(--s7); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 3px; }
+
+/* Three states, three visibly different things: blank is not zero is not
+   confirmed-unavailable. */
+.chip {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border: 1px solid var(--hairline);
+  color: var(--graphite);
+  white-space: nowrap;
+}
+
+.chip.has { border-color: var(--ink); color: var(--ink); }
+.chip.gap { border-style: dashed; }
+.chip.confirmed { background: var(--plate-sunk); text-decoration: line-through; }
+
+/* ==========================================================================
+   Detail drawer -- provenance, then the full evidence timeline.
+   ========================================================================== */
+
+.drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(500px, 100%);
+  background: var(--plate);
+  border-left: 2px solid var(--ink);
+  z-index: 40;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  padding: 20px 22px 60px;
+}
+
+.drawer.open { transform: translateX(0); }
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 11, 0.34);
+  z-index: 30;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.scrim.open { opacity: 1; pointer-events: auto; }
+
+.drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 12px;
+}
+
+.drawer-head h2 { font-size: 20px; line-height: 1.1; }
+
+.drawer-head .domain {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--graphite);
+  margin-top: 4px;
+  word-break: break-all;
+}
+
+.close {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 17px;
+  line-height: 1;
+  padding: 4px 7px;
+  border: 1px solid var(--hairline);
+  flex: none;
+}
+
+.drawer h3 {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  font-weight: 500;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  margin: 24px 0 8px;
+}
+
+.kv { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+
+.kv td {
+  padding: 5px 8px 5px 0;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+}
+
+.kv td.k {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  color: var(--graphite);
+  width: 40%;
+  font-size: 10.5px;
+}
+
+/* Provenance is a property of the value, so it sits on the value. */
+.src {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0 4px;
+  border: 1px solid var(--hairline);
+  color: var(--graphite);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.src[data-src="Slides"] { border-color: var(--s5); color: var(--s5); }
+.src[data-src="Public"]  { border-color: var(--s2); color: var(--s2); }
+.src[data-src="Manual"]  { border-color: var(--ink); color: var(--ink); }
+
+/* Per-company stepped trace: here stage is height, which a 19px grid row
+   cannot show but a 96px panel can. */
+.steps {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 96px;
+  border-bottom: 1px solid var(--ink);
+  border-left: 1px solid var(--hairline);
+  padding-left: 2px;
+  overflow-x: auto;
+}
+
+.step { width: 7px; flex: none; position: relative; }
+
+.step i { display: block; width: 100%; border-radius: 1px 1px 0 0; }
+.step i[data-stage="1"] { background: var(--s1); }
+.step i[data-stage="2"] { background: var(--s2); }
+.step i[data-stage="3"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s3); }
+.step i[data-stage="4"] { background: var(--s4); }
+.step i[data-stage="5"] { background: var(--s5); }
+.step i[data-stage="6"] { background: var(--s6); }
+.step i[data-stage="7"] { background: var(--s7); }
+
+.step.void {
+  background-image: repeating-linear-gradient(45deg, transparent 0 2px, var(--hairline) 2px 3px);
+  height: 100%;
+}
+
+.timeline { font-size: 11px; }
+
+.tl-row {
+  display: grid;
+  grid-template-columns: 78px 1fr auto;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hairline);
+  align-items: baseline;
+}
+
+.tl-row.absent {
+  color: var(--graphite);
+  background-image: repeating-linear-gradient(45deg, transparent 0 3px, var(--hairline) 3px 4px);
+}
+
+.tl-date { font-family: "Spline Sans Mono", ui-monospace, monospace; font-size: 10px; }
+.tl-page { font-family: "Spline Sans Mono", ui-monospace, monospace; font-size: 9.5px; color: var(--graphite); }
+.tl-bold { font-weight: 700; }
+
+.note {
+  font-size: 11px;
+  color: var(--graphite);
+  border-left: 2px solid var(--s7);
+  padding: 6px 0 6px 10px;
+  margin: 12px 0 0;
+}
+
+.search {
+  font: inherit;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  padding: 5px 9px;
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+  color: var(--ink);
+  width: 168px;
+}
+
+.empty {
+  padding: 26px 13px;
+  color: var(--graphite);
+  font-size: 12px;
+  text-align: center;
+}
+
+.foot {
+  margin-top: 56px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: 11px;
+  color: var(--graphite);
+  max-width: 76ch;
+}
+
+.foot code {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="masthead-top">
+      <h1>
+        New&nbsp;Deal Meeting
+        <span class="thin">Pipeline triage — reconstructed from 43 weekly slides</span>
+      </h1>
+      <div class="built">
+        <span class="mono" id="built"></span><br>
+        <span class="mono">source: slide extraction + Affinity enrichment</span>
+      </div>
+    </div>
+    <div class="vitals" id="vitals"></div>
+  </header>
+
+  <section class="section" id="trace-section">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">The signature</span>
+        <h2>Position over 43 weeks</h2>
+        <p>
+          Every column is one meeting, in true date order. Fill is the stage the
+          company sat in that week; a ring means the name was bold. The four
+          hatched columns are weeks with no slide — they cut through every row
+          so an absent meeting cannot be misread as a company going quiet.
+        </p>
+      </div>
+      <div class="views" id="views" role="group" aria-label="Which companies to trace"></div>
+    </div>
+
+    <div class="trace-scroll">
+      <div class="trace" id="trace"></div>
+    </div>
+
+    <div class="legend" id="legend"></div>
+    <div class="readout" id="readout" role="status" aria-live="polite"></div>
+  </section>
+
+  <div class="split">
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Nothing is merged until a person says so</span>
+          <h2>Review queue</h2>
+          <p>
+            Proposals, not edits. The 498 rows are the raw extraction; every
+            merge, split and phantom sits here with its evidence until someone
+            decides.
+          </p>
+        </div>
+      </div>
+      <div id="queue"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Work this first</span>
+          <h2>P1 worklist</h2>
+          <p>
+            The advanced-stage and discussed companies with gaps. Solid means
+            the value is known; dashed means nobody has looked yet.
+          </p>
+        </div>
+        <input class="search" id="search" type="search" placeholder="filter companies" aria-label="Filter companies">
+      </div>
+      <div id="worklist"></div>
+    </section>
+  </div>
+
+  <p class="foot">
+    Read-only. This page is generated from <code>data/pipeline.db</code> by
+    <code>scripts/build_ui.py</code> and holds a snapshot — editing, merging and
+    gap resolution go through the validated write path in
+    <code>src/evpipeline/validate.py</code>, which needs a server to be
+    reachable from a browser. Coverage is shown next to every count because a
+    bare count off this dataset is not yet quotable.
+  </p>
+
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" tabindex="-1" aria-label="Company detail"></aside>
+
+<script id="payload" type="application/json">"__PIPELINE_DATA__"</script>
+<script>
+"use strict";
+
+const DATA = JSON.parse(document.getElementById("payload").textContent);
+
+const STAGE_NAME = {};
+DATA.stages.forEach(s => { STAGE_NAME[s.id] = s.name; });
+
+const STAGE_SHORT = {
+  1: "Meetings This Week",
+  2: "Hold / Nurture",
+  3: "NewCo / Fellows",
+  4: "Prelim Diligence",
+  5: "Deep Diligence",
+  6: "Negotiate / Offer",
+  7: "Legal / Def Docs",
+};
+
+const FIELD_LABEL = {
+  website: "website",
+  hq_country: "country",
+  stage: "round stage",
+  round_size_usd: "round size",
+  owner_name: "owner",
+};
+
+const byId = new Map(DATA.companies.map(c => [c.id, c]));
+const weeks = DATA.meetings;
+const heldCount = DATA.totals.meetingsHeld;
+
+/* ---------------------------------------------------------------- masthead */
+
+function pct(n, d) { return d ? Math.round((n / d) * 100) + "%" : "--"; }
+
+function renderVitals() {
+  const cov = DATA.coverage;
+  const t = DATA.totals;
+  const vitals = [
+    { v: t.entities, d: "raw rows", label: "Companies extracted",
+      note: "before any merge" },
+    { v: t.reviewOpen, d: "open", label: "To review", flag: true },
+    { v: t.meetingsHeld, d: t.meetingsMissing + " absent", label: "Meetings",
+      flag: t.meetingsMissing > 0 },
+    { v: DATA.discussion.entities_discussed, d: "of " + t.entities,
+      label: "Discussed" },
+    { v: DATA.funnel.obs_deep, d: "observed", label: "Deep diligence" },
+    { v: DATA.funnel.obs_legal, d: "observed", label: "Legal diligence",
+      flag: true },
+    { v: pct(cov.stage[0], cov.stage[1]), d: cov.stage[0] + "/" + cov.stage[1],
+      label: "Stage coverage" },
+    { v: pct(cov["hq_country @ deep-diligence cohort"][0],
+             cov["hq_country @ deep-diligence cohort"][1]),
+      d: cov["hq_country @ deep-diligence cohort"][0] + "/" +
+         cov["hq_country @ deep-diligence cohort"][1],
+      label: "Geography, deep-dil" },
+  ];
+
+  document.getElementById("vitals").innerHTML = vitals.map(x => `
+    <div class="vital${x.flag ? " flag" : ""}">
+      <span class="stat-value">${x.v} <span class="stat-denom">${x.d}</span></span>
+      <span class="eyebrow">${x.label}</span>
+    </div>`).join("");
+
+  document.getElementById("built").textContent = "built " + DATA.builtAt;
+}
+
+/* ------------------------------------------------------------------- trace */
+
+const VIEWS = [
+  {
+    key: "advanced",
+    label: "advanced stage",
+    describe: "reached Deep Diligence or Legal",
+    pick: () => DATA.companies
+      .filter(c => c.reachedDeep)
+      .sort((a, b) => (b.furthest - a.furthest) || a.first.localeCompare(b.first)),
+  },
+  {
+    key: "discussed",
+    label: "discussed",
+    describe: "bold on at least one slide",
+    pick: () => DATA.companies
+      .filter(c => c.discussed)
+      .sort((a, b) => b.times - a.times),
+  },
+  {
+    key: "p1",
+    label: "P1 queue",
+    describe: "advanced or discussed, with gaps",
+    pick: () => DATA.companies
+      .filter(c => c.priority && c.priority.startsWith("P1"))
+      .sort((a, b) => b.gaps - a.gaps),
+  },
+  {
+    key: "longest",
+    label: "longest tracked",
+    describe: "most weeks on a slide",
+    pick: () => DATA.companies
+      .slice()
+      .sort((a, b) => b.appearances - a.appearances)
+      .slice(0, 26),
+  },
+  {
+    key: "onceonly",
+    label: "seen once",
+    describe: "a single sighting, then nothing",
+    pick: () => DATA.companies
+      .filter(c => c.appearances === 1)
+      .sort((a, b) => (a.first || "").localeCompare(b.first || ""))
+      .slice(0, 26),
+  },
+];
+
+let activeView = VIEWS[0];
+
+function renderViews() {
+  document.getElementById("views").innerHTML = VIEWS.map(v => `
+    <button class="view-btn" data-view="${v.key}"
+            aria-pressed="${v === activeView}">${v.label}</button>`).join("");
+}
+
+function renderTrace() {
+  const rows = activeView.pick();
+  const el = document.getElementById("trace");
+  el.style.setProperty("--weeks", weeks.length);
+  el.style.setProperty("--label-w", "148px");
+
+  const ticks = weeks.map((m, i) => {
+    const absent = m.status !== "held";
+    const first = i === 0;
+    const monthStart = i > 0 && m.date.slice(5, 7) !== weeks[i - 1].date.slice(5, 7);
+    const label = absent ? m.date.slice(5) : m.date.slice(0, 7);
+    const show = absent || first || monthStart;
+    return `<span class="tick${absent ? " absent" : ""}">${show ? label : ""}</span>`;
+  }).join("");
+
+  const body = rows.map(c => {
+    // Collapse dual-listings to the funnel position, and remember that the
+    // company was listed more than once that week.
+    const perWeek = new Map();
+    c.obs.forEach(([wi, stage, bold, page]) => {
+      const cur = perWeek.get(wi);
+      if (!cur) {
+        perWeek.set(wi, { stage, bold, page, n: 1 });
+      } else {
+        cur.n += 1;
+        cur.bold = cur.bold || bold;
+        if (stage > cur.stage) { cur.stage = stage; cur.page = page; }
+      }
+    });
+
+    const cells = weeks.map((m, i) => {
+      const absent = m.status !== "held";
+      const o = perWeek.get(i);
+      const mark = o
+        ? `<span class="mark" data-stage="${o.stage}" data-bold="${o.bold}"
+                 data-dual="${o.n > 1 ? 1 : 0}"></span>`
+        : "";
+      return `<span class="cellbox${absent ? " void" : ""}" data-w="${i}"
+                    data-eid="${c.id}">${mark}</span>`;
+    }).join("");
+
+    return `<div class="trace-row" data-eid="${c.id}">
+      <button class="row-label" data-open="${c.id}"
+              title="${c.name}">${c.name}</button>
+      <span class="track">${cells}</span>
+    </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="axis">
+      <span></span>
+      <span class="axis-ticks">${ticks}</span>
+    </div>
+    ${body || '<p class="empty">No companies in this view.</p>'}`;
+
+  document.getElementById("readout").innerHTML =
+    `<b>${rows.length}</b> companies &middot; ${activeView.describe} &middot; `
+    + `${heldCount} meetings held, <b>${DATA.totals.meetingsMissing}</b> absent`;
+}
+
+function renderLegend() {
+  // No inline background: stage 3 is an outline, and an inline style would
+  // win over the rule that draws it.
+  const ramp = [1, 2, 4, 5, 6, 7].map(s =>
+    `<span class="swatch"><i style="background:var(--s${s})"></i>${STAGE_SHORT[s]}</span>`
+  ).join("")
+  + `<span class="swatch"><i data-stage="3"></i>${STAGE_SHORT[3]}</span>`;
+  document.getElementById("legend").innerHTML = `
+    <span class="legend-group">${ramp}</span>
+    <span class="legend-group">
+      <span class="swatch"><i class="dim"></i>listed</span>
+      <span class="swatch"><i class="ring"></i>bold &mdash; discussed</span>
+      <span class="swatch"><i class="void"></i>no slide</span>
+    </span>`;
+}
+
+/* --------------------------------------------------------------- crosshair */
+
+const readout = document.getElementById("readout");
+let readoutBase = "";
+
+function describeCell(eid, wi) {
+  const c = byId.get(Number(eid));
+  const m = weeks[wi];
+  if (!c || !m) return "";
+  if (m.status !== "held") {
+    return `<b>${m.date}</b> &middot; no slide extracted &middot; ${m.note || ""}`;
+  }
+  const hits = c.obs.filter(o => o[0] === wi);
+  if (!hits.length) {
+    return `<b>${c.name}</b> &middot; ${m.date} &middot; not on the slide`;
+  }
+  const parts = hits
+    .sort((a, b) => b[1] - a[1])
+    .map(o => `${STAGE_SHORT[o[1]]}${o[2] ? " (bold)" : ""} p.${o[3]}`);
+  return `<b>${c.name}</b> &middot; ${m.date} &middot; ${parts.join(" + ")}`;
+}
+
+document.getElementById("trace").addEventListener("pointerover", e => {
+  const box = e.target.closest(".cellbox");
+  const row = e.target.closest(".trace-row");
+  document.querySelectorAll(".trace-row.is-active")
+    .forEach(r => r.classList.remove("is-active"));
+  if (row) row.classList.add("is-active");
+  if (box) {
+    const txt = describeCell(box.dataset.eid, Number(box.dataset.w));
+    if (txt) readout.innerHTML = txt;
+  }
+});
+
+document.getElementById("trace").addEventListener("pointerleave", () => {
+  document.querySelectorAll(".trace-row.is-active")
+    .forEach(r => r.classList.remove("is-active"));
+  readout.innerHTML = readoutBase;
+});
+
+/* ------------------------------------------------------------------- queue */
+
+const KIND_NOTE = {
+  merge_proposal: "one company behind two spellings",
+  stage_jump: "moved more than two levels in a week",
+  stage_regression: "moved backwards; legitimate, but should be stated",
+  group_split: "one row naming several companies",
+  duplicate_listing: "same company twice on one slide",
+  line_wrap_candidate: "a wrapped continuation, not a company",
+};
+
+function renderQueue() {
+  const groups = new Map();
+  DATA.review.forEach(r => {
+    if (!groups.has(r.kind)) groups.set(r.kind, []);
+    groups.get(r.kind).push(r);
+  });
+
+  const order = ["merge_proposal", "group_split", "duplicate_listing",
+                 "line_wrap_candidate", "stage_jump", "stage_regression"];
+  const kinds = order.filter(k => groups.has(k));
+
+  document.getElementById("queue").innerHTML = kinds.map((kind, i) => {
+    const items = groups.get(kind);
+    const rows = items.slice(0, 120).map(r => {
+      const high = r.confidence != null && r.confidence >= 0.9;
+      const head = r.targetName
+        ? `<span class="merge">
+             <span class="from">${r.entityName}</span>
+             <span class="arrow">&rarr;</span>
+             <span class="to">${r.targetName}</span>
+           </span>`
+        : `<span class="merge"><span class="to">${r.entityName || "&mdash;"}</span></span>`;
+      return `<div class="queue-item">
+        <span class="conf${high ? " high" : ""}">${r.confidence != null ? r.confidence.toFixed(2) : "&mdash;"}</span>
+        <span>${head}<span class="queue-detail">${r.detail}</span></span>
+      </div>`;
+    }).join("");
+    const more = items.length > 120
+      ? `<div class="queue-item"><span class="conf"></span><span class="queue-detail">and ${items.length - 120} more</span></div>`
+      : "";
+    return `<details class="queue-group"${i === 0 ? " open" : ""}>
+      <summary>
+        <span class="queue-kind">${kind.replace(/_/g, " ")}</span>
+        <span class="queue-note">${KIND_NOTE[kind] || ""}</span>
+        <span class="queue-count">${items.length}</span>
+      </summary>
+      <div class="queue-list">${rows}${more}</div>
+    </details>`;
+  }).join("");
+}
+
+/* ---------------------------------------------------------------- worklist */
+
+let filterText = "";
+
+function renderWorklist() {
+  const q = filterText.trim().toLowerCase();
+  let rows = DATA.companies.filter(c => c.priority && c.priority.startsWith("P1"));
+  if (q) {
+    rows = DATA.companies.filter(c => c.name.toLowerCase().includes(q));
+  }
+  rows = rows.slice().sort((a, b) => {
+    const t = (a.priority || "z").localeCompare(b.priority || "z");
+    return t || b.gaps - a.gaps;
+  }).slice(0, 60);
+
+  if (!rows.length) {
+    document.getElementById("worklist").innerHTML =
+      '<p class="empty">Nothing matches.</p>';
+    return;
+  }
+
+  const body = rows.map(c => {
+    const chips = Object.keys(FIELD_LABEL).map(f => {
+      const has = !c.missing.includes(f);
+      const state = c.gapState[f];
+      const cls = has ? "has"
+        : state === "confirmed_unavailable" ? "confirmed" : "gap";
+      return `<span class="chip ${cls}">${FIELD_LABEL[f]}</span>`;
+    }).join("");
+    const adv = c.priority && c.priority.includes("advanced");
+    return `<tr>
+      <td><button class="name-btn" data-open="${c.id}">${c.name}</button></td>
+      <td><span class="tier${adv ? " adv" : ""}">${(c.priority || "").replace(/^P(\d) - /, "P$1 ")}</span></td>
+      <td class="mono">${STAGE_SHORT[c.furthest] || "&mdash;"}</td>
+      <td><span class="chips">${chips}</span></td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("worklist").innerHTML = `
+    <table class="wl">
+      <thead><tr>
+        <th>Company</th><th>Tier</th><th>Furthest stage</th><th>Fields</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+}
+
+/* ------------------------------------------------------------------ drawer */
+
+const drawer = document.getElementById("drawer");
+const scrim = document.getElementById("scrim");
+let lastFocus = null;
+
+function fmtValue(field, v) {
+  if (v === null || v === undefined || v === "") return "&mdash;";
+  if (field === "round_size_usd") {
+    const n = Number(v);
+    if (n === 0) return "0 <span class=\"queue-note\">(genuinely zero)</span>";
+    return "$" + (n / 1e6).toFixed(n >= 1e6 ? 1 : 2) + "M";
+  }
+  return String(v);
+}
+
+function openDrawer(eid) {
+  const c = byId.get(Number(eid));
+  if (!c) return;
+  lastFocus = document.activeElement;
+
+  const perWeek = new Map();
+  c.obs.forEach(([wi, stage, bold, page]) => {
+    const cur = perWeek.get(wi);
+    if (!cur || stage > cur.stage) perWeek.set(wi, { stage, bold, page });
+    else if (cur) cur.bold = cur.bold || bold;
+  });
+
+  const steps = weeks.map((m, i) => {
+    if (m.status !== "held") return '<span class="step void"></span>';
+    const o = perWeek.get(i);
+    if (!o) return '<span class="step"></span>';
+    const h = Math.round((o.stage / 7) * 92);
+    return `<span class="step"><i data-stage="${o.stage}" style="height:${h}px"></i></span>`;
+  }).join("");
+
+  const tl = weeks.filter((m, i) => m.status !== "held" || perWeek.has(i))
+    .map(m => {
+      const i = weeks.indexOf(m);
+      if (m.status !== "held") {
+        return `<div class="tl-row absent">
+          <span class="tl-date">${m.date}</span>
+          <span>no slide extracted</span><span></span></div>`;
+      }
+      const o = perWeek.get(i);
+      return `<div class="tl-row">
+        <span class="tl-date">${m.date}</span>
+        <span class="${o.bold ? "tl-bold" : ""}">${STAGE_SHORT[o.stage]}${o.bold ? " &middot; bold" : ""}</span>
+        <span class="tl-page">p.${o.page}</span></div>`;
+    }).join("");
+
+  const fields = c.fields
+    .filter(([f]) => f !== "legacy_company_id")
+    .map(([f, v, src, cite]) => `<tr>
+      <td class="k">${f}</td>
+      <td>${fmtValue(f, v)}<span class="src" data-src="${src}">${src}</span>
+        ${cite ? `<div class="queue-note">${cite}</div>` : ""}</td>
+    </tr>`).join("");
+
+  const gapRows = Object.keys(FIELD_LABEL).map(f => {
+    const has = !c.missing.includes(f);
+    const state = c.gapState[f];
+    const text = has ? "known"
+      : state === "confirmed_unavailable" ? "checked — genuinely unavailable"
+      : "not yet looked at";
+    return `<tr><td class="k">${FIELD_LABEL[f]}</td><td>${text}</td></tr>`;
+  }).join("");
+
+  const aliases = (DATA.aliases[c.id] || []).filter(a => a !== c.name);
+
+  drawer.innerHTML = `
+    <div class="drawer-head">
+      <div>
+        <h2>${c.name}</h2>
+        <div class="domain">${c.domain || "no domain on record"}</div>
+      </div>
+      <button class="close" id="close-drawer" aria-label="Close">&times;</button>
+    </div>
+
+    ${c.phantom ? `<p class="note">Marked as a phantom row: ${c.phantomReason}.
+       The observations below are kept so the extraction stays auditable.</p>` : ""}
+
+    <h3>Position over time</h3>
+    <div class="steps">${steps}</div>
+    <div class="queue-note" style="margin-top:6px">
+      ${c.appearances} appearance${c.appearances === 1 ? "" : "s"},
+      ${c.first || "&mdash;"} to ${c.last || "&mdash;"};
+      furthest ${STAGE_SHORT[c.furthest] || "&mdash;"}${c.times ? `, bold ${c.times}&times;` : ", never bold"}
+    </div>
+
+    ${aliases.length ? `<h3>Also spelled</h3>
+      <div class="queue-note mono">${aliases.join(" &middot; ")}</div>` : ""}
+
+    <h3>Fields and provenance</h3>
+    <table class="kv">${fields || '<tr><td class="k">&mdash;</td><td>nothing recorded</td></tr>'}</table>
+
+    <h3>Gap state</h3>
+    <table class="kv">${gapRows}</table>
+
+    <h3>Evidence log &mdash; read only</h3>
+    <div class="timeline">${tl}</div>
+    <p class="note">Corrections never edit these rows. They go to
+      <span class="mono">slide_observation_override</span>, which shadows the log.</p>`;
+
+  drawer.classList.add("open");
+  scrim.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  drawer.focus();
+  document.getElementById("close-drawer").addEventListener("click", closeDrawer);
+}
+
+function closeDrawer() {
+  drawer.classList.remove("open");
+  scrim.classList.remove("open");
+  drawer.setAttribute("aria-hidden", "true");
+  if (lastFocus) lastFocus.focus();
+}
+
+/* ------------------------------------------------------------------ events */
+
+document.addEventListener("click", e => {
+  const open = e.target.closest("[data-open]");
+  if (open) { openDrawer(open.dataset.open); return; }
+  const view = e.target.closest("[data-view]");
+  if (view) {
+    activeView = VIEWS.find(v => v.key === view.dataset.view) || VIEWS[0];
+    renderViews();
+    renderTrace();
+    readoutBase = document.getElementById("readout").innerHTML;
+  }
+});
+
+scrim.addEventListener("click", closeDrawer);
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && drawer.classList.contains("open")) closeDrawer();
+});
+
+document.getElementById("search").addEventListener("input", e => {
+  filterText = e.target.value;
+  renderWorklist();
+});
+
+/* --------------------------------------------------------------------- go */
+
+renderVitals();
+renderViews();
+renderTrace();
+renderLegend();
+renderQueue();
+renderWorklist();
+readoutBase = document.getElementById("readout").innerHTML;
+</script>
+</body>
+</html>
