@@ -992,6 +992,7 @@ button {
 .tbl-scroll { overflow-x: auto; }
 
 .wl.co { min-width: 720px; }
+.wl.drive { min-width: 940px; }
 
 .wl th.sortable { cursor: pointer; user-select: none; }
 .wl th.sortable:hover { color: var(--ink); }
@@ -1309,6 +1310,8 @@ button {
     <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
       <button class="tab" role="tab" data-tab="pipeline" id="tab-pipeline"
               aria-controls="panel-pipeline">Companies <span class="n" id="tabn-pipeline"></span></button>
+      <button class="tab" role="tab" data-tab="drive" id="tab-drive"
+              aria-controls="panel-drive">Drive index <span class="n" id="tabn-drive"></span></button>
       <button class="tab" role="tab" data-tab="trends" id="tab-trends"
               aria-controls="panel-trends">Trends</button>
       <button class="tab" role="tab" data-tab="review" id="tab-review"
@@ -1353,6 +1356,42 @@ button {
 
     <div class="tbl-scroll" id="co-table"></div>
     <p class="tbl-foot" id="co-foot"></p>
+  </section>
+
+  <!-- ============================================================= drive index -->
+  <section class="panel section" id="panel-drive" role="tabpanel"
+           aria-labelledby="tab-drive" tabindex="-1">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Storage overlap</span>
+        <h2>In the New Deals companies index?</h2>
+        <p>
+          Every company in this cohort — which is the slide extraction plus
+          Affinity enrichment — against the index of company folders under
+          <span class="mono">New Deals / 02. Companies</span>. <b>Y</b> means EV
+          already holds a folder for it; <b>N</b> means the deal reached
+          diligence with nothing in storage under that name, which is the half
+          worth reading. The join is on name and each Y carries the folder it
+          matched and how, because slide spellings are not folder names.
+        </p>
+      </div>
+      <input class="search" id="drive-search" type="search"
+             placeholder="filter by name" aria-label="Filter by company name">
+    </div>
+
+    <div class="controls">
+      <span class="control-label">Show</span>
+      <span class="seg" id="drive-filter" role="group" aria-label="Filter by index membership">
+        <button class="view-btn" data-drive="all">all</button>
+        <button class="view-btn" data-drive="y">in the index</button>
+        <button class="view-btn" data-drive="n">not in it</button>
+      </span>
+    </div>
+
+    <p class="defline" id="drive-def"></p>
+
+    <div class="tbl-scroll" id="drive-table"></div>
+    <p class="tbl-foot" id="drive-foot"></p>
   </section>
 
   <!-- ================================================================== trends -->
@@ -1623,6 +1662,8 @@ function renderVitals() {
   document.getElementById("built").textContent = "built " + DATA.builtAt;
   document.getElementById("tabn-pipeline").textContent = t.entities;
   document.getElementById("tabn-review").textContent = t.reviewOpen;
+  document.getElementById("tabn-drive").textContent = DATA.driveIndex
+    ? DATA.driveIndex.matched : "";
   document.getElementById("tabn-worklist").textContent =
     DATA.companies.filter(c => c.priority && c.priority.startsWith("P1")).length;
 }
@@ -1631,7 +1672,7 @@ function renderVitals() {
    Tab routing. The hash carries section and category so a view is linkable.
    ========================================================================== */
 
-const PANELS = ["pipeline", "trends", "review", "worklist"];
+const PANELS = ["pipeline", "drive", "trends", "review", "worklist"];
 let activePanel = "pipeline";
 
 function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
@@ -2326,6 +2367,103 @@ function renderWorklist() {
     <p class="tbl-foot">${rows.length} compan${rows.length === 1 ? "y" : "ies"} · click a name for provenance</p>`;
 }
 
+/* ------------------------------------------------------------- drive index */
+
+/* How a Y was arrived at. Shown per row: the join is on name, so a Y that
+   nobody can check is worse than no Y at all. */
+const MATCH_NOTE = {
+  exact:     "name matches the folder exactly",
+  alias:     "a recorded slide spelling matches the folder",
+  suffix:    "matches once corporate and descriptor words are dropped",
+  prefix:    "one name is a prefix of the other",
+  ambiguous: "matches more than one folder — unresolved",
+};
+
+let driveFilter = "all";
+let driveText = "";
+
+function renderDrive() {
+  const meta = DATA.driveIndex;
+  if (!meta) {
+    document.getElementById("drive-table").innerHTML =
+      '<p class="empty">No index join in this file. Run <span class="mono">'
+      + 'python scripts/match_drive_index.py</span>.</p>';
+    document.getElementById("drive-def").textContent = "";
+    document.getElementById("drive-foot").textContent = "";
+    return;
+  }
+
+  document.getElementById("drive-filter").querySelectorAll("[data-drive]").forEach(b => {
+    b.setAttribute("aria-pressed", String(b.dataset.drive === driveFilter));
+  });
+
+  const q = driveText.trim().toLowerCase();
+  let rows = DATA.companies.slice();
+  if (driveFilter === "y") rows = rows.filter(c => c.idx && c.idx.tier !== "ambiguous");
+  if (driveFilter === "n") rows = rows.filter(c => !c.idx);
+  if (q) rows = rows.filter(c => c.name.toLowerCase().includes(q));
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+
+  const yes = DATA.companies.filter(c => c.idx && c.idx.tier !== "ambiguous").length;
+  const amb = DATA.companies.filter(c => c.idx && c.idx.tier === "ambiguous").length;
+  const no = DATA.companies.length - yes - amb;
+
+  document.getElementById("drive-def").innerHTML =
+    `<b>${yes}</b> of <b>${DATA.companies.length}</b> companies have a folder, `
+    + `<b>${no}</b> do not${amb ? `, <b>${amb}</b> match more than one` : ""} · `
+    + `index: ${esc(meta.file)} · ${meta.folders} folders`
+    + (meta.version ? ` · ${esc(meta.version)}` : "");
+
+  const body = rows.map(c => {
+    const x = c.idx;
+    const ambiguous = x && x.tier === "ambiguous";
+    const hit = x && !ambiguous;
+    const verdict = ambiguous
+      ? '<span class="chip confirmed" title="matches more than one folder">?</span>'
+      : hit ? '<span class="chip has">Y</span>'
+            : '<span class="chip gap">N</span>';
+    const folder = ambiguous
+      ? `<span class="queue-detail">${x.candidates.map(esc).join(" · ")}</span>`
+      : hit
+        ? esc(x.name) + (x.name === c.name ? "" :
+            `<div class="queue-detail mono">indexed as this, not “${esc(c.name)}”</div>`)
+        : "&mdash;";
+    return `<tr>
+      <td><button class="name-btn" data-open="${c.id}">${esc(c.name)}</button>${
+        c.domain ? `<div class="queue-detail mono">${esc(c.domain)}</div>` : ""}</td>
+      <td>${verdict}</td>
+      <td>${folder}</td>
+      <td><span class="tier" title="${esc(x ? MATCH_NOTE[x.tier] : "no folder under any recorded spelling")}">${
+        x ? x.tier : "&mdash;"}</span></td>
+      <td>${hit && x.portfolio ? '<span class="chip has">portfolio</span>' : "&mdash;"}</td>
+      <td>${hit && x.vertical ? esc(x.vertical) : "&mdash;"}${
+        hit && x.sectors ? `<div class="queue-detail">${esc(x.sectors)}</div>` : ""}</td>
+      <td class="mono">${hit && x.modified ? esc(x.modified) : "&mdash;"}</td>
+      <td>${stageCell(c.furthest)}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("drive-table").innerHTML = rows.length ? `
+    <table class="wl co drive">
+      <thead><tr>
+        <th>Company</th>
+        <th>In New&nbsp;Deals index?</th>
+        <th>Indexed folder</th>
+        <th>How matched</th>
+        <th>Portfolio</th>
+        <th>Vertical / sector</th>
+        <th>Folder modified</th>
+        <th>Furthest stage</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>` : `<p class="empty">Nothing matches${
+      q ? " “" + esc(driveText) + "”" : ""}.</p>`;
+
+  document.getElementById("drive-foot").innerHTML =
+    `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} shown · `
+    + "click a name for its evidence log";
+}
+
 /* ------------------------------------------------------------------ drawer */
 
 const drawer = document.getElementById("drawer");
@@ -2472,6 +2610,13 @@ document.addEventListener("click", e => {
     return;
   }
 
+  const drive = e.target.closest("[data-drive]");
+  if (drive) {
+    driveFilter = drive.dataset.drive;
+    renderDrive();
+    return;
+  }
+
   const view = e.target.closest("[data-view]");
   if (view) {
     activeView = VIEWS.find(v => v.key === view.dataset.view) || VIEWS[0];
@@ -2500,6 +2645,11 @@ document.getElementById("co-search").addEventListener("input", e => {
   renderCompanies();
 });
 
+document.getElementById("drive-search").addEventListener("input", e => {
+  driveText = e.target.value;
+  renderDrive();
+});
+
 document.getElementById("search").addEventListener("input", e => {
   filterText = e.target.value;
   renderWorklist();
@@ -2512,6 +2662,7 @@ window.addEventListener("hashchange", readHash);
 renderVitals();
 renderCatbar();
 renderCompanies();
+renderDrive();
 renderFunnel();
 renderAttention();
 renderMix();

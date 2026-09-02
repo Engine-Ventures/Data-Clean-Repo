@@ -15,6 +15,7 @@ source .venv/bin/activate          # see SETUP.md to build the venv
 python scripts/build_db.py         # data/raw/*.xlsx -> data/pipeline.db
 python scripts/build_ui.py         # data/pipeline.db -> ui/index.html
 python scripts/screen_diligence.py # screen it to the diligence cohort
+python scripts/match_drive_index.py # flag which companies have a Drive folder
 pytest                             # 69 regression tests
 ruff check .
 ```
@@ -230,13 +231,45 @@ likely `Lila Sciences`/EV0028). Both sit in the workbook's own `Stage History`
 sheet. Related: `Attune Neurosci` (EV0017) and `Attune Neurosciences` (EV0080)
 are both present — a dedup the workbook did not make.
 
+## Drive index overlap
+
+`scripts/match_drive_index.py` answers a question the slides cannot: of the
+companies that reached diligence, which ones does EV already hold a folder for?
+It joins the built interface against
+`src/Index, New Deals Companies, v2026-08-28-01.xlsx` — 982 distinct company
+folders under *New Deals / 02. Companies*, each tagged with sector, vertical, a
+one-line description and whether it is a portfolio company — and writes a Y/N
+plus the matched folder into the payload. **83 of the 185 companies have a
+folder; 102 do not.** The 102 are the point: a deal that reached Preliminary
+Diligence with nothing in storage under that name.
+
+The index has no domain and no entity id, so the join is on name, and slide
+spellings are not folder names. It is a ladder of four tiers, and the tier is
+carried into the payload and shown on every row, so no Y is unaccountable:
+
+| Tier | Rule | n |
+| --- | --- | --- |
+| `exact` | normalised canonical name == index company | 72 |
+| `alias` | a recorded slide spelling matches (`WAVR` → `WAVR Technologies`) | 3 |
+| `suffix` | equal after dropping corporate/descriptor tokens (`EnCharge` → `EnCharge AI`) | 5 |
+| `prefix` | one name is a string prefix of the other, ≥8 characters on the shorter side (`Attune Neurosci` → `Attune Neurosciences`) | 3 |
+
+Sector words are deliberately *not* in the suffix list: `Mobius Bio` and
+`Mobius` are not the same claim, so that pair reads N rather than being asserted.
+A tier that hits more than one folder is recorded as `ambiguous` and shown as a
+question, not resolved on the script's own judgement — the same rule the merge
+proposals follow. None occur at present. Like `screen_diligence.py` this runs
+over the *built* interface rather than the database, so the join has one
+definition and does not fork `build_ui.py`, and it is idempotent.
+
 ## Not done
 
 - Read-only interface. `scripts/build_ui.py` inlines the database into
   `ui/template.html` and writes `ui/index.html`: a single portable file with
-  four tabs — **Companies** (every company in each diligence category, on three
+  five tabs — **Companies** (every company in each diligence category, on three
   bases: latest position, ever in category, furthest reached; screened to the
-  four diligence stages, see above), **Trends**
+  four diligence stages, see above), **Drive index** (Y/N per company against
+  the New Deals folder index, see below), **Trends**
   (funnel, most-discussed, coverage, dwell, weekly stage mix, intake rate, and
   the per-company trace), **Review queue**, and **Enrichment**. Editing is not
   wired up: the §8 write surface in `src/evpipeline/validate.py` needs a server
