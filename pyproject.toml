@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "FURB", "ISC", "EXE"]
+
+[tool.ruff.lint.per-file-ignores]
+# These two insert the src/ path before importing evpipeline, which has to
+# happen after the sys.path line by construction.
+"scripts/build_db.py" = ["E402"]
+"tests/conftest.py" = ["E402"]
