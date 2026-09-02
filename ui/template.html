@@ -16,10 +16,10 @@
    reads as temperature before it reads as legend. Filament is spent on Legal
    Diligence and destructive actions and nowhere else.
 
-   NewCo / Fellows deliberately breaks the ramp -- it is drawn as an outline
-   rather than a fill, because it is a separate pathway for internal
-   companies, not a hotter rung. Colouring it as rung 3 would assert
-   something untrue.
+   The ramp starts at rung 4. This build is screened to the advanced-stage
+   cohort, so Meetings This Week, Hold / Nurture and NewCo / Fellows are not
+   stages this interface can render -- there is no colour for them because
+   nothing here can sit in them.
    ========================================================================== */
 :root {
   --paper:      #E7EAE6;
@@ -29,14 +29,15 @@
   --graphite:   #6B7370;
   --hairline:   #C6CCC5;
 
-  /* Stage ramp, index = stage_id */
-  --s1: #A4ADA9;  /* Meetings This Week  -- on the agenda, no position yet */
-  --s2: #7C919E;  /* Hold / Nurture      -- cold storage */
-  --s3: #6E8C7E;  /* NewCo / Fellows     -- off-ramp, drawn as outline */
+  /* Stage ramp, index = stage_id. Diligence stages only (4-7). */
   --s4: #A89043;  /* Preliminary Dil     -- brass */
   --s5: #C4762E;  /* Deep Diligence      -- copper */
   --s6: #A2512B;  /* Negotiate / Offer   -- ember, browner */
   --s7: #8F1508;  /* Legal / Def Docs    -- filament */
+
+  /* Not a stage: the Public-source badge used to borrow the Hold / Nurture
+     ramp colour, which no longer exists. */
+  --src-public: #7C919E;
 
   --focus: #1F5F8B;
 
@@ -53,13 +54,11 @@
     --ink:        #E8EBE7;
     --graphite:   #939C98;
     --hairline:   #2E353A;
-    --s1: #5C6663;
-    --s2: #5A7280;
-    --s3: #4F7263;
     --s4: #B99C42;
     --s5: #D4802F;
     --s6: #A85234;
     --s7: #EE3218;
+    --src-public: #5A7280;
     --focus: #63B3ED;
   }
 }
@@ -263,32 +262,42 @@ button {
   padding: 14px 16px 16px;
 }
 
-/* Week axis */
+/* Week axis.
+
+   47 labels do not fit side by side, which is why these used to be set
+   vertical-rl -- a reader had to tilt their head to find a date. Only month
+   starts carry a label now, positioned at their own column, so the dates lie
+   flat. Absent meetings keep a mark but lose their label: the hatching in the
+   plot already says which weeks have no slide, and the hover readout names
+   the date. */
 .axis {
   display: grid;
   grid-template-columns: var(--label-w) 1fr;
   gap: 0 12px;
   align-items: end;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
-.axis-ticks {
-  display: grid;
-  gap: var(--gutter);
-  grid-template-columns: repeat(var(--weeks), minmax(0, 1fr));
-}
+.axis-ticks { position: relative; height: 13px; }
+.axis-ticks.below { margin-top: 2px; }
 
-.tick {
+.axis-ticks span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
   font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 9px;
+  font-size: 9.5px;
+  line-height: 1.3;
   color: var(--graphite);
-  writing-mode: vertical-rl;
-  height: 46px;
-  line-height: 1;
-  justify-self: center;
+  white-space: nowrap;
 }
 
-.tick.absent { color: var(--s7); font-weight: 600; }
+.axis-ticks span.absent {
+  width: 1px;
+  height: 7px;
+  top: 3px;
+  background: var(--s7);
+}
 
 .trace-row {
   display: grid;
@@ -297,6 +306,8 @@ button {
   align-items: center;
   height: var(--row);
 }
+
+.trace-row.tall { height: var(--lane, 34px); }
 
 .trace-row:hover .row-label,
 .trace-row.is-active .row-label { color: var(--ink); }
@@ -329,6 +340,57 @@ button {
   position: relative;
 }
 
+/* One company's lane in the trace.
+
+   The lane is a step line, not a row of cells: stage is height as well as
+   colour, so a company climbing the funnel reads as a climb at a glance and
+   the eye can compare two lanes without decoding two colours. Colour is kept
+   because it is the deck's own encoding and it survives being printed.
+
+   The hit grid sits on top, gapless, so a cell centre lands exactly on its
+   week's x position and hover still resolves to one meeting. */
+.lane {
+  position: relative;
+  height: 100%;
+}
+
+.lane svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.lane .hit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--weeks), minmax(0, 1fr));
+}
+
+.lane .hit .cellbox { height: 100%; }
+
+.lane-base { stroke: var(--hairline); stroke-width: 1; }
+.lane-seg  { stroke: var(--graphite); stroke-width: 1.5; fill: none; }
+.lane-seg.gap { stroke-dasharray: 2 3; opacity: 0.55; }
+
+/* An observation on the line. The dense grid could not spare an outset ring
+   for bold -- it bled into the neighbouring week -- but a lane has room. */
+.mark.pin {
+  inset: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin: -4px 0 0 -4px;
+}
+
+.mark.pin[data-bold="1"] {
+  opacity: 1;
+  box-shadow: 0 0 0 1.5px var(--ink);
+}
+
 /* An observation. */
 .mark {
   position: absolute;
@@ -336,18 +398,10 @@ button {
   border-radius: 1px;
 }
 
-.mark[data-stage="1"] { background: var(--s1); }
-.mark[data-stage="2"] { background: var(--s2); }
 .mark[data-stage="4"] { background: var(--s4); }
 .mark[data-stage="5"] { background: var(--s5); }
 .mark[data-stage="6"] { background: var(--s6); }
 .mark[data-stage="7"] { background: var(--s7); }
-
-/* NewCo / Fellows: outline, not fill -- a separate pathway. */
-.mark[data-stage="3"] {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--s3);
-}
 
 /* Bold on the slide that week.
    Two things carry it, both inside the cell. An outset ring bleeds over the
@@ -363,15 +417,6 @@ button {
 .mark[data-bold="1"] {
   opacity: 1;
   box-shadow: inset 0 0 0 1.5px var(--ink);
-}
-
-/* Stage 3 already spends its box-shadow on the outline, so bold is a bar. */
-.mark[data-stage="3"] { opacity: 0.75; }
-
-.mark[data-stage="3"][data-bold="1"] {
-  opacity: 1;
-  box-shadow: inset 0 0 0 1.5px var(--s3);
-  border-bottom: 2.5px solid var(--ink);
 }
 
 /* Listed twice at one meeting: agenda column plus a thesis sub-section. */
@@ -433,10 +478,6 @@ button {
   flex: none;
 }
 
-.swatch i[data-stage="3"] {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--s3);
-}
 .swatch i.void {
   background-image: repeating-linear-gradient(45deg, transparent 0 2px, var(--hairline) 2px 3px);
 }
@@ -720,7 +761,7 @@ button {
 }
 
 .src[data-src="Slides"] { border-color: var(--s5); color: var(--s5); }
-.src[data-src="Public"]  { border-color: var(--s2); color: var(--s2); }
+.src[data-src="Public"]  { border-color: var(--src-public); color: var(--src-public); }
 .src[data-src="Manual"]  { border-color: var(--ink); color: var(--ink); }
 
 /* Per-company stepped trace: here stage is height, which a 19px grid row
@@ -739,9 +780,6 @@ button {
 .step { width: 7px; flex: none; position: relative; }
 
 .step i { display: block; width: 100%; border-radius: 1px 1px 0 0; }
-.step i[data-stage="1"] { background: var(--s1); }
-.step i[data-stage="2"] { background: var(--s2); }
-.step i[data-stage="3"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--s3); }
 .step i[data-stage="4"] { background: var(--s4); }
 .step i[data-stage="5"] { background: var(--s5); }
 .step i[data-stage="6"] { background: var(--s6); }
@@ -815,6 +853,440 @@ button {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ==========================================================================
+   Navigation: primary tabs, then the diligence-category strip.
+
+   The page used to be one long scroll where the trace, the queue and the
+   worklist all competed. They answer different questions, so they are now
+   four tab panels and only one is on screen at a time. The URL carries the
+   selection (#pipeline/deep-diligence) so a view can be linked to.
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-bottom: 2px solid var(--ink);
+  margin-top: 24px;
+}
+
+.tab {
+  padding: 9px 15px 8px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  border: 1px solid transparent;
+  border-bottom: none;
+  margin-bottom: -2px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.tab:hover { color: var(--ink); }
+
+.tab[aria-selected="true"] {
+  background: var(--plate);
+  border-color: var(--ink);
+  border-bottom: 2px solid var(--plate);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tab .n {
+  font-size: 10px;
+  color: var(--graphite);
+  font-weight: 400;
+}
+
+.tab[aria-selected="true"] .n { color: var(--ink); }
+
+.panel[hidden] { display: none !important; }
+
+/* Category strip. One button per diligence category; the count is part of
+   the label because a tab that returns nothing should say so before it is
+   pressed. */
+.catbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 14px;
+}
+
+.cat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.cat:hover { border-color: var(--graphite); }
+
+.cat .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 1px;
+  flex: none;
+}
+
+.cat .n {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--graphite);
+}
+
+.cat[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+  font-weight: 600;
+}
+
+.cat[aria-selected="true"] .n { color: var(--paper); }
+.cat.empty { opacity: 0.55; }
+
+/* Controls row: basis toggle + search, one line above the table. */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  padding: 11px 0 12px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 4px;
+}
+
+.control-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  margin-right: 2px;
+}
+
+.seg { display: flex; }
+
+.seg .view-btn:not(:first-child) { margin-left: -1px; }
+
+.defline {
+  font-size: 11.5px;
+  color: var(--graphite);
+  margin: 0 0 14px;
+  max-width: 92ch;
+}
+
+.defline b { color: var(--ink); font-weight: 600; }
+
+/* ==========================================================================
+   Company table
+   ========================================================================== */
+
+.tbl-scroll { overflow-x: auto; }
+
+.wl.co { min-width: 720px; }
+
+.wl th.sortable { cursor: pointer; user-select: none; }
+.wl th.sortable:hover { color: var(--ink); }
+
+.wl th .dir {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  margin-left: 3px;
+}
+
+.wl td.num, .wl th.num {
+  text-align: right;
+  padding-right: 18px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+}
+
+.stagecell { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+.stagecell i {
+  width: 9px; height: 9px; border-radius: 1px; flex: none;
+}
+
+.phantom-tag {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--s7);
+  color: var(--s7);
+  padding: 0 4px;
+  margin-left: 6px;
+}
+
+.tbl-foot {
+  font-size: 11px;
+  color: var(--graphite);
+  padding: 10px 0 0;
+}
+
+/* ==========================================================================
+   Charts.
+
+   Stage is ordered, so the chart marks use a single-hue ordinal ramp (light
+   at the top of the funnel, dark at Legal) rather than the categorical stage
+   colours of the trace: adjacent rungs of that ramp are indistinguishable
+   under deuteranopia when they sit against each other in a stack. Every
+   stacked segment carries a 2px surface gap, every chart has a table view,
+   and no chart relies on colour alone -- the funnel and the legend are
+   directly labelled.
+   ========================================================================== */
+
+:root {
+  --v1: #d9a685;
+  --v2: #cc8e64;
+  --v3: #bd7745;
+  --v4: #ae6021;
+  --v5: #9b4c00;
+  --v6: #833c00;
+  --v7: #682f00;
+  --v-solo: #ae6021;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --v1: #f9d6bf;
+    --v2: #eebb99;
+    --v3: #e3a072;
+    --v4: #d4864e;
+    --v5: #c16e2d;
+    --v6: #aa5910;
+    --v7: #8f4700;
+    --v-solo: #d4864e;
+  }
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
+  gap: 26px;
+}
+
+.card {
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+  padding: 15px 17px 17px;
+}
+
+.card h3 {
+  font-size: 12px;
+  font-variation-settings: "wdth" 112, "wght" 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0;
+  font-family: "Archivo", sans-serif;
+  color: var(--ink);
+}
+
+.card p.sub {
+  margin: 4px 0 14px;
+  font-size: 11px;
+  color: var(--graphite);
+  max-width: 60ch;
+}
+
+.card.wide { grid-column: 1 / -1; }
+
+/* -- horizontal bars (funnel, coverage) -- */
+
+.hbars { display: grid; gap: 7px; }
+
+.hbar {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 11.5px;
+}
+
+.hbar-label { color: var(--graphite); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.hbar-track {
+  height: 13px;
+  background: var(--plate-sunk);
+  position: relative;
+}
+
+.hbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  min-width: 2px;
+}
+
+.hbar-fill[data-v="1"] { background: var(--v1); }
+.hbar-fill[data-v="2"] { background: var(--v2); }
+.hbar-fill[data-v="3"] { background: var(--v3); }
+.hbar-fill[data-v="4"] { background: var(--v4); }
+.hbar-fill[data-v="5"] { background: var(--v5); }
+.hbar-fill[data-v="6"] { background: var(--v6); }
+.hbar-fill[data-v="7"] { background: var(--v7); }
+.hbar-fill.solo { background: var(--v-solo); }
+
+.hbar-val {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.hbar-val .drop { color: var(--graphite); font-size: 10px; margin-left: 5px; }
+
+/* -- stacked columns over time -- */
+
+.colchart { overflow-x: auto; padding-bottom: 2px; }
+
+.colchart-inner { min-width: 560px; }
+
+.cols {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  height: 172px;
+  align-items: end;
+  border-bottom: 1px solid var(--ink);
+}
+
+.col {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  height: 100%;
+  justify-content: flex-start;
+  position: relative;
+  min-width: 0;
+}
+
+.col:hover { background: var(--plate-sunk); }
+
+.col .sg { display: block; width: 100%; min-height: 1px; }
+.col .sg[data-v="1"] { background: var(--v1); }
+.col .sg[data-v="2"] { background: var(--v2); }
+.col .sg[data-v="3"] { background: var(--v3); }
+.col .sg[data-v="4"] { background: var(--v4); }
+.col .sg[data-v="5"] { background: var(--v5); }
+.col .sg[data-v="6"] { background: var(--v6); }
+.col .sg[data-v="7"] { background: var(--v7); }
+.col .sg.solo { background: var(--v-solo); border-radius: 4px 4px 0 0; }
+.col .sg:last-child { border-radius: 4px 4px 0 0; }
+
+.col.absent {
+  background-image: repeating-linear-gradient(45deg, transparent 0 2px, var(--hairline) 2px 3px);
+}
+
+.colaxis {
+  position: relative;
+  height: 13px;
+  margin-top: 6px;
+}
+
+.colaxis span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  line-height: 1.3;
+  color: var(--graphite);
+  white-space: nowrap;
+}
+
+.colaxis span.absent {
+  width: 1px;
+  height: 7px;
+  top: 3px;
+  background: var(--s7);
+}
+
+.ymax {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--graphite);
+  margin-bottom: 3px;
+}
+
+/* Chart legend: ordinal ramp, always labelled. */
+.vlegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 13px;
+  margin-top: 12px;
+  font-size: 10.5px;
+  color: var(--graphite);
+}
+
+.vlegend .swatch i[data-v="1"] { background: var(--v1); }
+.vlegend .swatch i[data-v="2"] { background: var(--v2); }
+.vlegend .swatch i[data-v="3"] { background: var(--v3); }
+.vlegend .swatch i[data-v="4"] { background: var(--v4); }
+.vlegend .swatch i[data-v="5"] { background: var(--v5); }
+.vlegend .swatch i[data-v="6"] { background: var(--v6); }
+.vlegend .swatch i[data-v="7"] { background: var(--v7); }
+
+/* Table view behind every chart, so identity never rests on colour. */
+.tableview {
+  margin-top: 12px;
+  font-size: 11px;
+}
+
+.tableview > summary {
+  cursor: pointer;
+  color: var(--graphite);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  list-style: none;
+}
+
+.tableview > summary::-webkit-details-marker { display: none; }
+.tableview > summary::before { content: "+ "; }
+.tableview[open] > summary::before { content: "\2212 "; }
+
+.tableview .scroll { overflow-x: auto; margin-top: 8px; }
+
+.tableview table { border-collapse: collapse; font-size: 10.5px; width: 100%; }
+
+.tableview th, .tableview td {
+  text-align: right;
+  padding: 3px 7px 3px 0;
+  border-bottom: 1px solid var(--hairline);
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  white-space: nowrap;
+}
+
+.tableview th:first-child, .tableview td:first-child { text-align: left; }
+
+.chart-readout {
+  margin-top: 10px;
+  min-height: 18px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--graphite);
+}
+
+.chart-readout b { color: var(--ink); font-weight: 600; }
+
+.warnbox {
+  border-left: 2px solid var(--s7);
+  padding: 8px 0 8px 11px;
+  font-size: 11.5px;
+  margin-bottom: 18px;
+}
+
+.okbox {
+  font-size: 11.5px;
+  color: var(--graphite);
+  margin-bottom: 18px;
+}
 </style>
 </head>
 <body>
@@ -833,62 +1305,220 @@ button {
       </div>
     </div>
     <div class="vitals" id="vitals"></div>
+
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" data-tab="pipeline" id="tab-pipeline"
+              aria-controls="panel-pipeline">Companies <span class="n" id="tabn-pipeline"></span></button>
+      <button class="tab" role="tab" data-tab="trends" id="tab-trends"
+              aria-controls="panel-trends">Trends</button>
+      <button class="tab" role="tab" data-tab="review" id="tab-review"
+              aria-controls="panel-review">Review queue <span class="n" id="tabn-review"></span></button>
+      <button class="tab" role="tab" data-tab="worklist" id="tab-worklist"
+              aria-controls="panel-worklist">Enrichment <span class="n" id="tabn-worklist"></span></button>
+    </nav>
   </header>
 
-  <section class="section" id="trace-section">
+  <!-- ===================================================== companies by category -->
+  <section class="panel section" id="panel-pipeline" role="tabpanel"
+           aria-labelledby="tab-pipeline" tabindex="-1">
     <div class="section-head">
       <div>
-        <span class="eyebrow">The signature</span>
-        <h2>Position over 43 weeks</h2>
+        <span class="eyebrow">Press a category</span>
+        <h2>Companies by diligence category</h2>
         <p>
-          Every column is one meeting, in true date order. Fill is the stage the
-          company sat in that week; a ring means the name was bold. The four
-          hatched columns are weeks with no slide — they cut through every row
-          so an absent meeting cannot be misread as a company going quiet.
+          Every company the slides placed in each diligence category. This file
+          is screened to the advanced-stage cohort, so the only categories that
+          exist here are the four diligence rungs — a company's pre-diligence
+          weeks in Meetings This Week, Hold / Nurture or NewCo / Fellows are not
+          carried. Counts are on the buttons, so a category that returns nothing
+          says so before you press it.
         </p>
       </div>
-      <div class="views" id="views" role="group" aria-label="Which companies to trace"></div>
+      <input class="search" id="co-search" type="search"
+             placeholder="filter by name" aria-label="Filter companies by name">
     </div>
 
-    <div class="trace-scroll">
-      <div class="trace" id="trace"></div>
+    <div class="catbar" id="catbar" role="tablist" aria-label="Diligence category"></div>
+
+    <div class="controls">
+      <span class="control-label">Basis</span>
+      <span class="seg" id="basis" role="group" aria-label="How category membership is counted">
+        <button class="view-btn" data-basis="latest">latest position</button>
+        <button class="view-btn" data-basis="ever">ever in category</button>
+        <button class="view-btn" data-basis="furthest">furthest reached</button>
+      </span>
     </div>
 
-    <div class="legend" id="legend"></div>
-    <div class="readout" id="readout" role="status" aria-live="polite"></div>
+    <p class="defline" id="basis-def"></p>
+
+    <div class="tbl-scroll" id="co-table"></div>
+    <p class="tbl-foot" id="co-foot"></p>
   </section>
 
-  <div class="split">
-    <section class="section">
-      <div class="section-head">
-        <div>
-          <span class="eyebrow">Nothing is merged until a person says so</span>
-          <h2>Review queue</h2>
-          <p>
-            Proposals, not edits. The 498 rows are the raw extraction; every
-            merge, split and phantom sits here with its evidence until someone
-            decides.
-          </p>
-        </div>
+  <!-- ================================================================== trends -->
+  <section class="panel section" id="panel-trends" role="tabpanel"
+           aria-labelledby="tab-trends" tabindex="-1">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Analytics</span>
+        <h2>Trends over 43 weeks</h2>
+        <p>
+          Four questions: how the funnel narrows, how the stage mix moved week to
+          week, when new companies entered, and how much of the record is
+          actually filled in. Every count carries its denominator.
+        </p>
       </div>
-      <div id="queue"></div>
-    </section>
+    </div>
 
-    <section class="section">
-      <div class="section-head">
-        <div>
-          <span class="eyebrow">Work this first</span>
-          <h2>P1 worklist</h2>
-          <p>
-            The advanced-stage and discussed companies with gaps. Solid means
-            the value is known; dashed means nobody has looked yet.
-          </p>
-        </div>
-        <input class="search" id="search" type="search" placeholder="filter companies" aria-label="Filter companies">
+    <div class="cards">
+
+      <div class="card">
+        <h3>Funnel</h3>
+        <p class="sub">
+          Companies that got at least this far, and the share of the previous
+          rung that converted. Reached, not observed — a company can skip a rung
+          in a week, so the two differ by design. Preliminary Diligence is the
+          base rung: this file is screened to companies that reached it, so
+          there is no wider population to convert from here.
+        </p>
+        <div class="hbars" id="funnel-bars"></div>
+        <details class="tableview" id="funnel-table"><summary>table view</summary></details>
       </div>
-      <div id="worklist"></div>
-    </section>
-  </div>
+
+      <div class="card">
+        <h3>Most discussed</h3>
+        <p class="sub">
+          Weeks the name was bold — on the agenda for discussion rather than
+          merely listed. The eight most-discussed companies in this cohort; the
+          table view lists all of them.
+        </p>
+        <div class="hbars" id="attention-bars"></div>
+        <details class="tableview" id="attention-table"><summary>table view</summary></details>
+      </div>
+
+      <div class="card">
+        <h3>Field coverage</h3>
+        <p class="sub">
+          Share of live companies with a value on record. Unknown is a gap, not
+          a category — which is why no count on this page is quotable bare.
+        </p>
+        <div class="hbars" id="cov-bars"></div>
+        <details class="tableview" id="cov-table"><summary>table view</summary></details>
+      </div>
+
+      <div class="card">
+        <h3>Dwell time</h3>
+        <p class="sub">
+          Median and longest run of meetings a company spent listed in each
+          stage, counted in meetings held rather than calendar weeks.
+        </p>
+        <div id="dwell-table"></div>
+      </div>
+
+      <div class="card wide">
+        <h3>Stage mix, week by week</h3>
+        <p class="sub">
+          One column per meeting, in true date order; segment height is the
+          number of companies sitting in that stage that week. The four hatched
+          columns are weeks with no slide — an absent meeting is not a quiet week.
+          A company appears in a week only if it sat in a diligence stage that
+          week, so a column is shorter than the meeting's full slide.
+        </p>
+        <div class="ymax" id="mix-ymax"></div>
+        <div class="colchart">
+          <div class="colchart-inner">
+            <div class="cols" id="mix-cols"></div>
+            <div class="colaxis" id="mix-axis"></div>
+          </div>
+        </div>
+        <div class="vlegend" id="mix-legend"></div>
+        <div class="chart-readout" id="mix-readout" role="status" aria-live="polite"></div>
+        <details class="tableview" id="mix-table"><summary>table view</summary></details>
+      </div>
+
+      <div class="card wide">
+        <h3>New companies per meeting</h3>
+        <p class="sub">
+          First sighting on a slide. This is intake rate, not deal flow — a
+          company already known to the team only appears here the first week it
+          was written down.
+        </p>
+        <div class="ymax" id="new-ymax"></div>
+        <div class="colchart">
+          <div class="colchart-inner">
+            <div class="cols" id="new-cols"></div>
+            <div class="colaxis" id="new-axis"></div>
+          </div>
+        </div>
+        <div class="chart-readout" id="new-readout" role="status" aria-live="polite"></div>
+        <details class="tableview" id="new-table"><summary>table view</summary></details>
+      </div>
+
+
+
+      <div class="card wide" id="trace-card">
+        <h3>The trace — position over 43 weeks</h3>
+        <p class="sub">
+          One lane per company, one step per meeting. Height and colour both
+          carry the stage — Preliminary Diligence sits on the floor, Legal at
+          the ceiling — so a climb reads as a climb. A ring means the name was
+          bold that week. A dashed connector spans meetings where the company
+          was not listed at all, because its position then was never observed.
+          This chart keeps the categorical stage colours of the deck; the
+          charts above use an ordered ramp.
+        </p>
+        <div class="views" id="views" role="group" aria-label="Which companies to trace"></div>
+        <div class="trace-scroll" style="margin-top:12px">
+          <div class="trace" id="trace"></div>
+        </div>
+        <div class="legend" id="legend"></div>
+        <div class="readout" id="readout" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="card wide">
+        <h3>Reconciliation</h3>
+        <p class="sub">Block totals checked against cohort totals on every build.</p>
+        <div id="recon"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================================================================== review -->
+  <section class="panel section" id="panel-review" role="tabpanel"
+           aria-labelledby="tab-review" tabindex="-1">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Nothing is merged until a person says so</span>
+        <h2>Review queue</h2>
+        <p>
+          Proposals, not edits. Every merge, split and phantom raised against a
+          company in this cohort sits here with its evidence until someone
+          decides; proposals against screened-out companies are not shown.
+        </p>
+      </div>
+    </div>
+    <div id="queue"></div>
+  </section>
+
+  <!-- ================================================================ worklist -->
+  <section class="panel section" id="panel-worklist" role="tabpanel"
+           aria-labelledby="tab-worklist" tabindex="-1">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Work this first</span>
+        <h2>P1 enrichment worklist</h2>
+        <p>
+          The advanced-stage and discussed companies with gaps. Solid means the
+          value is known; dashed means nobody has looked yet; struck through
+          means someone looked and it genuinely is not available.
+        </p>
+      </div>
+      <input class="search" id="search" type="search" placeholder="filter companies"
+             aria-label="Filter worklist">
+    </div>
+    <div id="worklist-body"></div>
+  </section>
 
   <p class="foot">
     Read-only. This page is generated from <code>data/pipeline.db</code> by
@@ -910,13 +1540,7 @@ button {
 
 const DATA = JSON.parse(document.getElementById("payload").textContent);
 
-const STAGE_NAME = {};
-DATA.stages.forEach(s => { STAGE_NAME[s.id] = s.name; });
-
 const STAGE_SHORT = {
-  1: "Meetings This Week",
-  2: "Hold / Nurture",
-  3: "NewCo / Fellows",
   4: "Prelim Diligence",
   5: "Deep Diligence",
   6: "Negotiate / Offer",
@@ -934,32 +1558,60 @@ const FIELD_LABEL = {
 const byId = new Map(DATA.companies.map(c => [c.id, c]));
 const weeks = DATA.meetings;
 const heldCount = DATA.totals.meetingsHeld;
-
-/* ---------------------------------------------------------------- masthead */
+const STAGE_IDS = DATA.stages.map(s => s.id);
 
 function pct(n, d) { return d ? Math.round((n / d) * 100) + "%" : "--"; }
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g,
+    ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+}
+
+/* ==========================================================================
+   Derived per-company facts.
+
+   A company is routinely listed twice at one meeting -- once under "Meetings
+   This Week" and once under a thesis sub-section -- so each week is collapsed
+   to its highest stage before anything is counted. That collapse is done once,
+   here, and every view reads it, so the category tabs, the trace and the
+   charts cannot disagree with each other.
+   ========================================================================== */
+
+DATA.companies.forEach(c => {
+  const perWeek = new Map();
+  c.obs.forEach(([wi, stage, bold, page]) => {
+    const cur = perWeek.get(wi);
+    if (!cur) perWeek.set(wi, { stage, bold, page, n: 1 });
+    else {
+      cur.n += 1;
+      cur.bold = cur.bold || bold;
+      if (stage > cur.stage) { cur.stage = stage; cur.page = page; }
+    }
+  });
+  c._perWeek = perWeek;
+  c._ever = new Set(c.obs.map(o => o[1]));
+  // latest = the collapsed stage at the most recent meeting the company was on.
+  // build_ui.py emits it too; recomputing keeps older payloads working.
+  const lastWi = c.obs.length ? Math.max(...c.obs.map(o => o[0])) : null;
+  c._latest = c.latest != null ? c.latest
+            : lastWi == null ? null : perWeek.get(lastWi).stage;
+});
+
+/* ------------------------------------------------------------------ masthead */
 
 function renderVitals() {
   const cov = DATA.coverage;
   const t = DATA.totals;
   const vitals = [
-    { v: t.entities, d: "raw rows", label: "Companies extracted",
-      note: "before any merge" },
-    { v: t.reviewOpen, d: "open", label: "To review", flag: true },
+    { v: t.entities, d: "diligence cohort", label: "Companies screened" },
+    { v: DATA.funnel.obs_prelim, d: "of " + t.entities, label: "Seen in prelim dil" },
+    { v: DATA.funnel.reached_deep, d: "of " + t.entities, label: "Reached deep dil" },
+    { v: DATA.funnel.reached_legal, d: "of " + t.entities, label: "Reached legal", flag: true },
+    { v: DATA.discussion.entities_discussed, d: "of " + t.entities, label: "Ever discussed" },
     { v: t.meetingsHeld, d: t.meetingsMissing + " absent", label: "Meetings",
       flag: t.meetingsMissing > 0 },
-    { v: DATA.discussion.entities_discussed, d: "of " + t.entities,
-      label: "Discussed" },
-    { v: DATA.funnel.obs_deep, d: "observed", label: "Deep diligence" },
-    { v: DATA.funnel.obs_legal, d: "observed", label: "Legal diligence",
-      flag: true },
+    { v: t.reviewOpen, d: "open", label: "To review", flag: true },
     { v: pct(cov.stage[0], cov.stage[1]), d: cov.stage[0] + "/" + cov.stage[1],
-      label: "Stage coverage" },
-    { v: pct(cov["hq_country @ deep-diligence cohort"][0],
-             cov["hq_country @ deep-diligence cohort"][1]),
-      d: cov["hq_country @ deep-diligence cohort"][0] + "/" +
-         cov["hq_country @ deep-diligence cohort"][1],
-      label: "Geography, deep-dil" },
+      label: "Round-stage coverage" },
   ];
 
   document.getElementById("vitals").innerHTML = vitals.map(x => `
@@ -969,53 +1621,482 @@ function renderVitals() {
     </div>`).join("");
 
   document.getElementById("built").textContent = "built " + DATA.builtAt;
+  document.getElementById("tabn-pipeline").textContent = t.entities;
+  document.getElementById("tabn-review").textContent = t.reviewOpen;
+  document.getElementById("tabn-worklist").textContent =
+    DATA.companies.filter(c => c.priority && c.priority.startsWith("P1")).length;
 }
 
-/* ------------------------------------------------------------------- trace */
+/* ==========================================================================
+   Tab routing. The hash carries section and category so a view is linkable.
+   ========================================================================== */
+
+const PANELS = ["pipeline", "trends", "review", "worklist"];
+let activePanel = "pipeline";
+
+function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+
+function showPanel(name, push) {
+  activePanel = PANELS.includes(name) ? name : "pipeline";
+  PANELS.forEach(p => {
+    document.getElementById("panel-" + p).hidden = p !== activePanel;
+    const t = document.getElementById("tab-" + p);
+    t.setAttribute("aria-selected", String(p === activePanel));
+    t.tabIndex = p === activePanel ? 0 : -1;
+  });
+  if (activePanel === "trends") renderTrace();   // needs layout to size
+  if (push !== false) writeHash();
+}
+
+function writeHash() {
+  const h = activePanel === "pipeline" && activeCat !== "all"
+    ? "#pipeline/" + slug(STAGE_SHORT[activeCat] || activeCat)
+    : "#" + activePanel;
+  if (location.hash !== h) history.replaceState(null, "", h);
+}
+
+function readHash() {
+  const parts = location.hash.replace(/^#/, "").split("/");
+  if (!parts[0]) return;
+  if (parts[1]) {
+    const hit = STAGE_IDS.find(s => slug(STAGE_SHORT[s]) === parts[1]);
+    if (hit) activeCat = hit;
+  }
+  showPanel(parts[0], false);
+}
+
+/* ==========================================================================
+   Companies by diligence category
+   ========================================================================== */
+
+const BASES = {
+  latest: {
+    label: "latest position",
+    def: `<b>Latest position</b> — the diligence stage a company sat in at the
+          most recent meeting it appeared on <i>in a diligence category</i>. A
+          company that later slid back to Hold / Nurture or Meetings This Week
+          still reads at its last diligence rung, because this file does not
+          carry those categories. Each company appears under exactly one
+          category. This is the "where is it now" reading, and it is silent
+          about whether the company is still live: the slides record no
+          outcome, so a company that stopped appearing simply stops here.`,
+    test: (c, s) => c._latest === s,
+  },
+  ever: {
+    label: "ever in category",
+    def: `<b>Ever in category</b> — the company was listed under this category
+          on at least one slide. A company appears under every category it
+          passed through, so the counts sum to more than ${DATA.totals.entities}.
+          These are the numbers the brief quotes (15 deep diligence, 6 legal).`,
+    test: (c, s) => c._ever.has(s),
+  },
+  furthest: {
+    label: "furthest reached",
+    def: `<b>Furthest reached</b> — the deepest category a company ever reached,
+          whether or not it was observed in every rung on the way. One category
+          per company. Use this for conversion rates; use "ever in category" for
+          "who did we actually look at".`,
+    test: (c, s) => c.furthest === s,
+  },
+};
+
+let activeBasis = "latest";
+let activeCat = "all";
+let coFilter = "";
+let sortKey = "latest";
+let sortDir = -1;
+
+function catMembers(cat, basis) {
+  const test = BASES[basis].test;
+  const rows = cat === "all" ? DATA.companies.slice()
+    : DATA.companies.filter(c => test(c, cat));
+  const q = coFilter.trim().toLowerCase();
+  return q ? rows.filter(c => c.name.toLowerCase().includes(q)
+                           || (c.domain || "").toLowerCase().includes(q))
+           : rows;
+}
+
+function renderCatbar() {
+  const test = BASES[activeBasis].test;
+  const counts = {};
+  STAGE_IDS.forEach(s => { counts[s] = DATA.companies.filter(c => test(c, s)).length; });
+
+  const btn = (key, label, n, stage) => `
+    <button class="cat${n === 0 ? " empty" : ""}" role="tab" data-cat="${key}"
+            aria-selected="${String(String(activeCat) === key)}">
+      ${stage ? `<span class="dot" data-stage="${stage}"
+            style="background:var(--s${stage})"></span>` : ""}
+      <span>${label}</span><span class="n">${n}</span>
+    </button>`;
+
+  document.getElementById("catbar").innerHTML =
+    btn("all", "All companies", DATA.companies.length, null)
+    + STAGE_IDS.map(s => btn(String(s), STAGE_SHORT[s], counts[s], s)).join("");
+
+  document.getElementById("basis").querySelectorAll("[data-basis]").forEach(b => {
+    b.setAttribute("aria-pressed", String(b.dataset.basis === activeBasis));
+  });
+  document.getElementById("basis-def").innerHTML = BASES[activeBasis].def;
+}
+
+const CO_COLS = [
+  { key: "name",        label: "Company",       sortable: true },
+  { key: "latest",      label: "Latest",        sortable: true },
+  { key: "furthest",    label: "Furthest",      sortable: true },
+  { key: "appearances", label: "Weeks listed",  sortable: true, num: true },
+  { key: "discussed",   label: "Discussed?",    sortable: true, num: true },
+  { key: "first",       label: "First seen",    sortable: true },
+  { key: "last",        label: "Last seen",     sortable: true },
+  { key: "gaps",        label: "Gaps",          sortable: true, num: true },
+  { key: "priority",    label: "Priority",      sortable: true },
+];
+
+function sortVal(c, key) {
+  if (key === "latest") return c._latest || 0;
+  // Sorting a Y/N column on the flag alone leaves 34 Ys in name order, so the
+  // week count breaks the tie and the most-discussed sit at the top of the Ys.
+  if (key === "discussed") return (c.discussed ? 1000 : 0) + (c.times || 0);
+  if (key === "name") return c.name.toLowerCase();
+  const v = c[key];
+  return v == null ? (typeof sortVal(DATA.companies[0], key) === "string" ? "" : 0) : v;
+}
+
+function stageCell(s) {
+  if (!s) return '<span class="hbar-label">&mdash;</span>';
+  return `<span class="stagecell"><i data-stage="${s}" style="background:var(--s${s})"></i>${STAGE_SHORT[s]}</span>`;
+}
+
+function renderCompanies() {
+  const rows = catMembers(activeCat, activeBasis).sort((a, b) => {
+    const x = sortVal(a, sortKey), y = sortVal(b, sortKey);
+    if (x < y) return -sortDir;
+    if (x > y) return sortDir;
+    return a.name.localeCompare(b.name);
+  });
+
+  const shown = rows.slice(0, 250);
+  const head = CO_COLS.map(col => `
+    <th class="${col.sortable ? "sortable" : ""}${col.num ? " num" : ""}" data-sort="${col.key}"
+        aria-sort="${sortKey === col.key ? (sortDir === 1 ? "ascending" : "descending") : "none"}">
+      ${col.label}${sortKey === col.key ? `<span class="dir">${sortDir === 1 ? "▲" : "▼"}</span>` : ""}
+    </th>`).join("");
+
+  const body = shown.map(c => `
+    <tr>
+      <td><button class="name-btn" data-open="${c.id}">${esc(c.name)}</button>${
+        c.phantom ? '<span class="phantom-tag" title="PDF line-wrap artifact; kept for audit">phantom</span>' : ""}
+        ${c.domain ? `<div class="queue-detail mono">${esc(c.domain)}</div>` : ""}</td>
+      <td>${stageCell(c._latest)}</td>
+      <td>${stageCell(c.furthest)}</td>
+      <td class="num">${c.appearances}</td>
+      <td class="num" title="${c.times ? c.times + (c.times === 1 ? " week bold" : " weeks bold") : "never bold on a slide"}">${c.discussed ? "Y" : "N"}</td>
+      <td class="mono">${c.first || "&mdash;"}</td>
+      <td class="mono">${c.last || "&mdash;"}</td>
+      <td class="num">${c.gaps}<span class="stat-denom">/5</span></td>
+      <td><span class="tier${(c.priority || "").startsWith("P1") ? " adv" : ""}">${
+        (c.priority || "").replace(/^P(\d) - /, "P$1 ")}</span></td>
+    </tr>`).join("");
+
+  document.getElementById("co-table").innerHTML = rows.length ? `
+    <table class="wl co">
+      <thead><tr>${head}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>` : `<p class="empty">No companies in this category${
+      coFilter ? " matching “" + esc(coFilter) + "”" : ""}.</p>`;
+
+  const catName = activeCat === "all" ? "all companies" : STAGE_SHORT[activeCat];
+  document.getElementById("co-foot").innerHTML =
+    `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} · ${esc(catName)} · `
+    + `${BASES[activeBasis].label}${rows.length > shown.length
+        ? ` · showing the first ${shown.length}, sort or filter to narrow`
+        : ""} · click a name for its evidence log`;
+}
+
+/* ==========================================================================
+   Charts
+   ========================================================================== */
+
+function hbar(label, value, o) {
+  o = o || {};
+  const scale = o.max != null ? o.max : o.denom;
+  const w = scale ? Math.max(0.8, (value / scale) * 100) : 0;
+  return `<div class="hbar">
+    <span class="hbar-label" title="${esc(label)}">${esc(label)}</span>
+    <span class="hbar-track"><span class="hbar-fill${o.v ? "" : " solo"}"
+      ${o.v ? `data-v="${o.v}"` : ""} style="width:${w.toFixed(1)}%"></span></span>
+    <span class="hbar-val">${value}${o.denom ? `<span class="stat-denom">/${o.denom}</span>` : ""}${
+      o.note ? `<span class="drop">${esc(o.note)}</span>` : ""}</span>
+  </div>`;
+}
+
+function tableView(el, headers, rows) {
+  document.getElementById(el).innerHTML =
+    "<summary>table view</summary><div class=\"scroll\"><table><thead><tr>"
+    + headers.map(h => `<th>${h}</th>`).join("")
+    + "</tr></thead><tbody>"
+    + rows.map(r => "<tr>" + r.map(v => `<td>${v}</td>`).join("") + "</tr>").join("")
+    + "</tbody></table></div>";
+}
+
+function renderFunnel() {
+  const f = DATA.funnel;
+  const total = DATA.totals.entities;
+  const steps = [
+    { label: "Prelim Diligence",      n: f.reached_prelim,    v: 4, prev: null },
+    { label: "Deep Diligence",        n: f.reached_deep,      v: 5, prev: f.reached_prelim },
+    { label: "Negotiate / Offer",     n: f.reached_negotiate, v: 6, prev: f.reached_deep },
+    { label: "Legal / Def Docs",      n: f.reached_legal,     v: 7, prev: f.reached_negotiate },
+  ];
+  document.getElementById("funnel-bars").innerHTML = steps.map(s =>
+    hbar(s.label, s.n, { denom: total, v: s.v,
+                         note: s.prev ? pct(s.n, s.prev) + " of previous" : "" })).join("");
+  tableView("funnel-table", ["Rung", "Reached", "Of cohort", "Of previous rung"],
+    steps.map(s => [s.label, s.n, pct(s.n, total), s.prev ? pct(s.n, s.prev) : "&mdash;"]));
+}
+
+function renderAttention() {
+  const top = DATA.companies.filter(c => c.times > 0)
+    .sort((a, b) => b.times - a.times || a.name.localeCompare(b.name));
+  const max = top.length ? top[0].times : 1;
+  document.getElementById("attention-bars").innerHTML =
+    top.slice(0, 8).map(c => hbar(c.name, c.times,
+      { max, note: STAGE_SHORT[c.furthest] || "" })).join("")
+    || '<p class="empty">Nothing discussed.</p>';
+  tableView("attention-table", ["Company", "Weeks discussed", "Weeks listed", "Furthest"],
+    top.map(c => [esc(c.name), c.times, c.appearances, STAGE_SHORT[c.furthest] || "&mdash;"]));
+}
+
+// Stage mix: companies per stage per meeting, from the collapsed per-week stage.
+function mixData() {
+  const per = weeks.map(() => ({}));
+  DATA.companies.forEach(c => {
+    c._perWeek.forEach((o, wi) => {
+      per[wi][o.stage] = (per[wi][o.stage] || 0) + 1;
+    });
+  });
+  return per;
+}
+
+function renderMix() {
+  const per = mixData();
+  const totals = per.map(p => Object.values(p).reduce((a, b) => a + b, 0));
+  const max = Math.max(1, ...totals);
+
+  document.getElementById("mix-ymax").textContent =
+    "companies listed — peak " + max + " in one week";
+  document.getElementById("mix-cols").style.setProperty("--n", weeks.length);
+  document.getElementById("mix-axis").style.setProperty("--n", weeks.length);
+
+  document.getElementById("mix-cols").innerHTML = weeks.map((m, i) => {
+    if (m.status !== "held") return `<span class="col absent" data-w="${i}"></span>`;
+    const segs = STAGE_IDS.map(s => {
+      const n = per[i][s] || 0;
+      if (!n) return "";
+      return `<span class="sg" data-v="${s}" style="height:${((n / max) * 100).toFixed(2)}%"></span>`;
+    }).join("");
+    return `<span class="col" data-w="${i}">${segs}</span>`;
+  }).join("");
+
+  document.getElementById("mix-axis").innerHTML = axisTicks();
+
+  document.getElementById("mix-legend").innerHTML = STAGE_IDS.map(s =>
+    `<span class="swatch"><i data-v="${s}"></i>${STAGE_SHORT[s]}</span>`).join("")
+    + '<span class="swatch"><i class="void"></i>no slide</span>';
+
+  const mixBase = `<b>${heldCount}</b> meetings held · peak <b>${max}</b> companies in one week`;
+  document.getElementById("mix-readout").innerHTML = mixBase;
+
+  const cols = document.getElementById("mix-cols");
+  cols.addEventListener("pointerover", e => {
+    const col = e.target.closest(".col");
+    if (!col) return;
+    const i = Number(col.dataset.w), m = weeks[i];
+    if (m.status !== "held") {
+      document.getElementById("mix-readout").innerHTML =
+        `<b>${m.date}</b> · no slide extracted${m.note ? " · " + esc(m.note) : ""}`;
+      return;
+    }
+    const parts = STAGE_IDS.filter(s => per[i][s])
+      .map(s => `${STAGE_SHORT[s]} ${per[i][s]}`).reverse();
+    document.getElementById("mix-readout").innerHTML =
+      `<b>${m.date}</b> · ${totals[i]} listed · ${parts.join(" · ")}`;
+  });
+  cols.addEventListener("pointerleave", () => {
+    document.getElementById("mix-readout").innerHTML = mixBase;
+  });
+
+  tableView("mix-table",
+    ["Meeting"].concat(STAGE_IDS.map(s => STAGE_SHORT[s])).concat(["Total"]),
+    weeks.map((m, i) => [m.date + (m.status !== "held" ? " (no slide)" : "")]
+      .concat(STAGE_IDS.map(s => per[i][s] || 0)).concat([totals[i]])));
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// x centre of week i, as a percentage of the plot width. Every chart on the
+// week axis uses this one function, so the trace, the stage mix and the intake
+// chart cannot drift out of alignment with their shared axis.
+function weekX(i) { return ((i + 0.5) / weeks.length) * 100; }
+
+function monthLabel(i) {
+  const m = weeks[i];
+  const mon = MONTHS[Number(m.date.slice(5, 7)) - 1];
+  const yearChanged = i === 0 || m.date.slice(0, 4) !== weeks[i - 1].date.slice(0, 4);
+  return yearChanged ? `${mon} ${m.date.slice(0, 4)}` : mon;
+}
+
+function axisTicks() {
+  return weeks.map((m, i) => {
+    const absent = m.status !== "held";
+    const monthStart = i === 0 || m.date.slice(5, 7) !== weeks[i - 1].date.slice(5, 7);
+    const at = `left:${weekX(i).toFixed(3)}%`;
+    if (absent) {
+      return `<span class="absent" style="${at}" title="${m.date} — no slide"></span>`;
+    }
+    if (!monthStart) return "";
+    return `<span style="${at}">${monthLabel(i)}</span>`;
+  }).join("");
+}
+
+function renderNew() {
+  const firstAt = weeks.map(() => 0);
+  const idxOf = new Map(weeks.map((m, i) => [m.date, i]));
+  DATA.companies.forEach(c => {
+    if (c.first != null && idxOf.has(c.first)) firstAt[idxOf.get(c.first)] += 1;
+  });
+  const max = Math.max(1, ...firstAt);
+
+  document.getElementById("new-ymax").textContent =
+    "new companies — peak " + max + " in one week, " + DATA.totals.entities + " in total";
+  document.getElementById("new-cols").style.setProperty("--n", weeks.length);
+  document.getElementById("new-axis").style.setProperty("--n", weeks.length);
+
+  document.getElementById("new-cols").innerHTML = weeks.map((m, i) => {
+    if (m.status !== "held") return `<span class="col absent" data-w="${i}"></span>`;
+    return `<span class="col" data-w="${i}">${firstAt[i]
+      ? `<span class="sg solo" style="height:${((firstAt[i] / max) * 100).toFixed(2)}%"></span>` : ""}</span>`;
+  }).join("");
+  document.getElementById("new-axis").innerHTML = axisTicks();
+
+  const base = `<b>${DATA.totals.entities}</b> first sightings over ${heldCount} meetings · `
+    + `median <b>${median(firstAt.filter((n, i) => weeks[i].status === "held"))}</b> a week`;
+  document.getElementById("new-readout").innerHTML = base;
+
+  const cols = document.getElementById("new-cols");
+  cols.addEventListener("pointerover", e => {
+    const col = e.target.closest(".col");
+    if (!col) return;
+    const i = Number(col.dataset.w), m = weeks[i];
+    document.getElementById("new-readout").innerHTML = m.status !== "held"
+      ? `<b>${m.date}</b> · no slide extracted`
+      : `<b>${m.date}</b> · ${firstAt[i]} new compan${firstAt[i] === 1 ? "y" : "ies"}`;
+  });
+  cols.addEventListener("pointerleave", () => {
+    document.getElementById("new-readout").innerHTML = base;
+  });
+
+  tableView("new-table", ["Meeting", "New companies"],
+    weeks.map((m, i) => [m.date + (m.status !== "held" ? " (no slide)" : ""),
+                         m.status !== "held" ? "&mdash;" : firstAt[i]]));
+}
+
+function median(xs) {
+  if (!xs.length) return 0;
+  const s = xs.slice().sort((a, b) => a - b), h = s.length >> 1;
+  return s.length % 2 ? s[h] : Math.round(((s[h - 1] + s[h]) / 2) * 10) / 10;
+}
+
+function renderCoverage() {
+  const cov = DATA.coverage;
+  const keys = Object.keys(cov);
+  document.getElementById("cov-bars").innerHTML = keys.map(k => {
+    const [n, d] = cov[k];
+    return hbar(FIELD_LABEL[k] || k, n, { denom: d, note: pct(n, d) });
+  }).join("");
+  tableView("cov-table", ["Field", "Present", "Of", "Coverage"],
+    keys.map(k => [FIELD_LABEL[k] || k, cov[k][0], cov[k][1], pct(cov[k][0], cov[k][1])]));
+}
+
+// Longest unbroken run of meetings-held a company spent listed at one stage.
+function renderDwell() {
+  const heldOrdinal = new Map();
+  let n = 0;
+  weeks.forEach((m, i) => { if (m.status === "held") heldOrdinal.set(i, n++); });
+
+  const runsByStage = new Map(STAGE_IDS.map(s => [s, []]));
+  DATA.companies.forEach(c => {
+    const atStage = new Map();
+    c._perWeek.forEach((o, wi) => {
+      if (!heldOrdinal.has(wi)) return;
+      if (!atStage.has(o.stage)) atStage.set(o.stage, []);
+      atStage.get(o.stage).push(heldOrdinal.get(wi));
+    });
+    atStage.forEach((ords, stage) => {
+      ords.sort((a, b) => a - b);
+      let best = 1, run = 1;
+      for (let i = 1; i < ords.length; i++) {
+        run = ords[i] === ords[i - 1] + 1 ? run + 1 : 1;
+        if (run > best) best = run;
+      }
+      runsByStage.get(stage).push({ best, total: ords.length });
+    });
+  });
+
+  const rows = STAGE_IDS.filter(s => runsByStage.get(s).length).map(s => {
+    const r = runsByStage.get(s);
+    return `<tr>
+      <td>${stageCell(s)}</td>
+      <td class="num">${r.length}</td>
+      <td class="num">${median(r.map(x => x.best))}</td>
+      <td class="num">${Math.max(...r.map(x => x.best))}</td>
+      <td class="num">${median(r.map(x => x.total))}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("dwell-table").innerHTML = `
+    <table class="wl">
+      <thead><tr>
+        <th>Stage</th>
+        <th class="num">Companies</th>
+        <th class="num">Median run</th>
+        <th class="num">Longest run</th>
+        <th class="num">Median weeks</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="tbl-foot">A run is consecutive meetings held. "Median weeks" counts
+    every week listed in the stage, consecutive or not.</p>`;
+}
+
+function renderRecon() {
+  const w = DATA.reconciliation || [];
+  document.getElementById("recon").innerHTML = w.length
+    ? w.map(x => `<p class="warnbox">${esc(x)}</p>`).join("")
+    : `<p class="okbox">All checks clean: the furthest-stage distribution sums to
+       the entity count, no company is observed at a stage it did not reach, no
+       funnel row points at a merged entity, and no observation falls on a week
+       recorded as not held.</p>`;
+}
+
+/* ==========================================================================
+   The trace (unchanged encoding: categorical stage colours, ring = bold)
+   ========================================================================== */
 
 const VIEWS = [
-  {
-    key: "advanced",
-    label: "advanced stage",
-    describe: "reached Deep Diligence or Legal",
-    pick: () => DATA.companies
-      .filter(c => c.reachedDeep)
-      .sort((a, b) => (b.furthest - a.furthest) || a.first.localeCompare(b.first)),
-  },
-  {
-    key: "discussed",
-    label: "discussed",
-    describe: "bold on at least one slide",
-    pick: () => DATA.companies
-      .filter(c => c.discussed)
-      .sort((a, b) => b.times - a.times),
-  },
-  {
-    key: "p1",
-    label: "P1 queue",
-    describe: "advanced or discussed, with gaps",
-    pick: () => DATA.companies
-      .filter(c => c.priority && c.priority.startsWith("P1"))
-      .sort((a, b) => b.gaps - a.gaps),
-  },
-  {
-    key: "longest",
-    label: "longest tracked",
-    describe: "most weeks on a slide",
-    pick: () => DATA.companies
-      .slice()
-      .sort((a, b) => b.appearances - a.appearances)
-      .slice(0, 26),
-  },
-  {
-    key: "onceonly",
-    label: "seen once",
-    describe: "a single sighting, then nothing",
-    pick: () => DATA.companies
-      .filter(c => c.appearances === 1)
-      .sort((a, b) => (a.first || "").localeCompare(b.first || ""))
-      .slice(0, 26),
-  },
+  { key: "advanced", label: "advanced stage", describe: "reached Deep Diligence or Legal",
+    pick: () => DATA.companies.filter(c => c.reachedDeep)
+      .sort((a, b) => (b.furthest - a.furthest) || a.first.localeCompare(b.first)) },
+  { key: "discussed", label: "discussed", describe: "bold on at least one slide",
+    pick: () => DATA.companies.filter(c => c.discussed).sort((a, b) => b.times - a.times) },
+  { key: "p1", label: "P1 queue", describe: "advanced or discussed, with gaps",
+    pick: () => DATA.companies.filter(c => c.priority && c.priority.startsWith("P1"))
+      .sort((a, b) => b.gaps - a.gaps) },
+  { key: "longest", label: "longest tracked", describe: "most weeks on a slide",
+    pick: () => DATA.companies.slice().sort((a, b) => b.appearances - a.appearances).slice(0, 26) },
+  { key: "onceonly", label: "seen once", describe: "a single sighting, then nothing",
+    pick: () => DATA.companies.filter(c => c.appearances === 1)
+      .sort((a, b) => (a.first || "").localeCompare(b.first || "")).slice(0, 26) },
 ];
 
 let activeView = VIEWS[0];
@@ -1026,73 +2107,89 @@ function renderViews() {
             aria-pressed="${v === activeView}">${v.label}</button>`).join("");
 }
 
+/* Lane geometry. The SVG is drawn in week units across and pixels down, and
+   stretched horizontally by the browser (preserveAspectRatio="none"); strokes
+   are marked non-scaling so a wide viewport does not fatten the lines. */
+const LANE_H = 34;
+const LANE_PAD = 7;
+
+function laneY(stage) {
+  return +(LANE_PAD + ((7 - stage) / 3) * (LANE_H - LANE_PAD * 2)).toFixed(2);
+}
+
+// Position within the run of meetings that actually happened, so a company
+// listed either side of an absent week counts as consecutive.
+const heldSeq = new Map();
+weeks.forEach((m, i) => { if (m.status === "held") heldSeq.set(i, heldSeq.size); });
+
+function lane(c) {
+  const series = [...c._perWeek.entries()]
+    .map(([wi, o]) => ({ wi, ...o }))
+    .sort((a, b) => a.wi - b.wi);
+
+  const segs = series.slice(1).map((b, k) => {
+    const a = series[k];
+    // A break in the run means the position between these two weeks was never
+    // observed, so the connector says so rather than asserting a straight line.
+    const consecutive = (heldSeq.get(b.wi) - heldSeq.get(a.wi)) === 1;
+    return `<polyline class="lane-seg${consecutive ? "" : " gap"}"
+              vector-effect="non-scaling-stroke"
+              points="${a.wi + 0.5},${laneY(a.stage)} ${b.wi + 0.5},${laneY(a.stage)}
+                      ${b.wi + 0.5},${laneY(b.stage)}"/>`;
+  }).join("");
+
+  const pins = series.map(o =>
+    `<span class="mark pin" data-stage="${o.stage}" data-bold="${o.bold}"
+           style="left:${weekX(o.wi).toFixed(3)}%;top:${laneY(o.stage).toFixed(1)}px"></span>`
+  ).join("");
+
+  const cells = weeks.map((m, i) =>
+    `<span class="cellbox${m.status !== "held" ? " void" : ""}"
+           data-w="${i}" data-eid="${c.id}"></span>`).join("");
+
+  return `<div class="lane">
+    <svg viewBox="0 0 ${weeks.length} ${LANE_H}" preserveAspectRatio="none"
+         aria-hidden="true">
+      <line class="lane-base" vector-effect="non-scaling-stroke"
+            x1="0" y1="${laneY(4)}" x2="${weeks.length}" y2="${laneY(4)}"/>
+      ${segs}
+    </svg>
+    ${pins}
+    <span class="hit">${cells}</span>
+  </div>`;
+}
+
 function renderTrace() {
   const rows = activeView.pick();
   const el = document.getElementById("trace");
   el.style.setProperty("--weeks", weeks.length);
   el.style.setProperty("--label-w", "148px");
+  el.style.setProperty("--lane", LANE_H + "px");
 
-  const ticks = weeks.map((m, i) => {
-    const absent = m.status !== "held";
-    const first = i === 0;
-    const monthStart = i > 0 && m.date.slice(5, 7) !== weeks[i - 1].date.slice(5, 7);
-    const label = absent ? m.date.slice(5) : m.date.slice(0, 7);
-    const show = absent || first || monthStart;
-    return `<span class="tick${absent ? " absent" : ""}">${show ? label : ""}</span>`;
-  }).join("");
+  const axis = `<div class="axis"><span></span>
+    <span class="axis-ticks">${axisTicks()}</span></div>`;
+  const axisBelow = `<div class="axis"><span></span>
+    <span class="axis-ticks below">${axisTicks()}</span></div>`;
 
-  const body = rows.map(c => {
-    // Collapse dual-listings to the funnel position, and remember that the
-    // company was listed more than once that week.
-    const perWeek = new Map();
-    c.obs.forEach(([wi, stage, bold, page]) => {
-      const cur = perWeek.get(wi);
-      if (!cur) {
-        perWeek.set(wi, { stage, bold, page, n: 1 });
-      } else {
-        cur.n += 1;
-        cur.bold = cur.bold || bold;
-        if (stage > cur.stage) { cur.stage = stage; cur.page = page; }
-      }
-    });
+  const body = rows.map(c => `
+    <div class="trace-row tall" data-eid="${c.id}">
+      <button class="row-label" data-open="${c.id}" title="${esc(c.name)}">${esc(c.name)}</button>
+      ${lane(c)}
+    </div>`).join("");
 
-    const cells = weeks.map((m, i) => {
-      const absent = m.status !== "held";
-      const o = perWeek.get(i);
-      const mark = o
-        ? `<span class="mark" data-stage="${o.stage}" data-bold="${o.bold}"
-                 data-dual="${o.n > 1 ? 1 : 0}"></span>`
-        : "";
-      return `<span class="cellbox${absent ? " void" : ""}" data-w="${i}"
-                    data-eid="${c.id}">${mark}</span>`;
-    }).join("");
+  el.innerHTML = rows.length
+    ? axis + body + axisBelow
+    : axis + '<p class="empty">No companies in this view.</p>';
 
-    return `<div class="trace-row" data-eid="${c.id}">
-      <button class="row-label" data-open="${c.id}"
-              title="${c.name}">${c.name}</button>
-      <span class="track">${cells}</span>
-    </div>`;
-  }).join("");
-
-  el.innerHTML = `
-    <div class="axis">
-      <span></span>
-      <span class="axis-ticks">${ticks}</span>
-    </div>
-    ${body || '<p class="empty">No companies in this view.</p>'}`;
-
-  document.getElementById("readout").innerHTML =
-    `<b>${rows.length}</b> companies &middot; ${activeView.describe} &middot; `
+  readoutBase = `<b>${rows.length}</b> companies &middot; ${activeView.describe} &middot; `
     + `${heldCount} meetings held, <b>${DATA.totals.meetingsMissing}</b> absent`;
+  document.getElementById("readout").innerHTML = readoutBase;
 }
 
 function renderLegend() {
-  // No inline background: stage 3 is an outline, and an inline style would
-  // win over the rule that draws it.
-  const ramp = [1, 2, 4, 5, 6, 7].map(s =>
+  const ramp = STAGE_IDS.map(s =>
     `<span class="swatch"><i style="background:var(--s${s})"></i>${STAGE_SHORT[s]}</span>`
-  ).join("")
-  + `<span class="swatch"><i data-stage="3"></i>${STAGE_SHORT[3]}</span>`;
+  ).join("");
   document.getElementById("legend").innerHTML = `
     <span class="legend-group">${ramp}</span>
     <span class="legend-group">
@@ -1102,9 +2199,6 @@ function renderLegend() {
     </span>`;
 }
 
-/* --------------------------------------------------------------- crosshair */
-
-const readout = document.getElementById("readout");
 let readoutBase = "";
 
 function describeCell(eid, wi) {
@@ -1112,34 +2206,29 @@ function describeCell(eid, wi) {
   const m = weeks[wi];
   if (!c || !m) return "";
   if (m.status !== "held") {
-    return `<b>${m.date}</b> &middot; no slide extracted &middot; ${m.note || ""}`;
+    return `<b>${m.date}</b> &middot; no slide extracted &middot; ${esc(m.note || "")}`;
   }
   const hits = c.obs.filter(o => o[0] === wi);
-  if (!hits.length) {
-    return `<b>${c.name}</b> &middot; ${m.date} &middot; not on the slide`;
-  }
-  const parts = hits
-    .sort((a, b) => b[1] - a[1])
+  if (!hits.length) return `<b>${esc(c.name)}</b> &middot; ${m.date} &middot; not on the slide`;
+  const parts = hits.sort((a, b) => b[1] - a[1])
     .map(o => `${STAGE_SHORT[o[1]]}${o[2] ? " (bold)" : ""} p.${o[3]}`);
-  return `<b>${c.name}</b> &middot; ${m.date} &middot; ${parts.join(" + ")}`;
+  return `<b>${esc(c.name)}</b> &middot; ${m.date} &middot; ${parts.join(" + ")}`;
 }
 
 document.getElementById("trace").addEventListener("pointerover", e => {
   const box = e.target.closest(".cellbox");
   const row = e.target.closest(".trace-row");
-  document.querySelectorAll(".trace-row.is-active")
-    .forEach(r => r.classList.remove("is-active"));
+  document.querySelectorAll(".trace-row.is-active").forEach(r => r.classList.remove("is-active"));
   if (row) row.classList.add("is-active");
   if (box) {
     const txt = describeCell(box.dataset.eid, Number(box.dataset.w));
-    if (txt) readout.innerHTML = txt;
+    if (txt) document.getElementById("readout").innerHTML = txt;
   }
 });
 
 document.getElementById("trace").addEventListener("pointerleave", () => {
-  document.querySelectorAll(".trace-row.is-active")
-    .forEach(r => r.classList.remove("is-active"));
-  readout.innerHTML = readoutBase;
+  document.querySelectorAll(".trace-row.is-active").forEach(r => r.classList.remove("is-active"));
+  document.getElementById("readout").innerHTML = readoutBase;
 });
 
 /* ------------------------------------------------------------------- queue */
@@ -1162,7 +2251,8 @@ function renderQueue() {
 
   const order = ["merge_proposal", "group_split", "duplicate_listing",
                  "line_wrap_candidate", "stage_jump", "stage_regression"];
-  const kinds = order.filter(k => groups.has(k));
+  const kinds = order.filter(k => groups.has(k))
+    .concat([...groups.keys()].filter(k => !order.includes(k)));
 
   document.getElementById("queue").innerHTML = kinds.map((kind, i) => {
     const items = groups.get(kind);
@@ -1170,14 +2260,14 @@ function renderQueue() {
       const high = r.confidence != null && r.confidence >= 0.9;
       const head = r.targetName
         ? `<span class="merge">
-             <span class="from">${r.entityName}</span>
+             <span class="from">${esc(r.entityName)}</span>
              <span class="arrow">&rarr;</span>
-             <span class="to">${r.targetName}</span>
+             <span class="to">${esc(r.targetName)}</span>
            </span>`
-        : `<span class="merge"><span class="to">${r.entityName || "&mdash;"}</span></span>`;
+        : `<span class="merge"><span class="to">${esc(r.entityName) || "&mdash;"}</span></span>`;
       return `<div class="queue-item">
         <span class="conf${high ? " high" : ""}">${r.confidence != null ? r.confidence.toFixed(2) : "&mdash;"}</span>
-        <span>${head}<span class="queue-detail">${r.detail}</span></span>
+        <span>${head}<span class="queue-detail">${esc(r.detail)}</span></span>
       </div>`;
     }).join("");
     const more = items.length > 120
@@ -1201,17 +2291,14 @@ let filterText = "";
 function renderWorklist() {
   const q = filterText.trim().toLowerCase();
   let rows = DATA.companies.filter(c => c.priority && c.priority.startsWith("P1"));
-  if (q) {
-    rows = DATA.companies.filter(c => c.name.toLowerCase().includes(q));
-  }
+  if (q) rows = rows.filter(c => c.name.toLowerCase().includes(q));
   rows = rows.slice().sort((a, b) => {
     const t = (a.priority || "z").localeCompare(b.priority || "z");
     return t || b.gaps - a.gaps;
-  }).slice(0, 60);
+  });
 
   if (!rows.length) {
-    document.getElementById("worklist").innerHTML =
-      '<p class="empty">Nothing matches.</p>';
+    document.getElementById("worklist-body").innerHTML = '<p class="empty">Nothing matches.</p>';
     return;
   }
 
@@ -1219,26 +2306,24 @@ function renderWorklist() {
     const chips = Object.keys(FIELD_LABEL).map(f => {
       const has = !c.missing.includes(f);
       const state = c.gapState[f];
-      const cls = has ? "has"
-        : state === "confirmed_unavailable" ? "confirmed" : "gap";
+      const cls = has ? "has" : state === "confirmed_unavailable" ? "confirmed" : "gap";
       return `<span class="chip ${cls}">${FIELD_LABEL[f]}</span>`;
     }).join("");
     const adv = c.priority && c.priority.includes("advanced");
     return `<tr>
-      <td><button class="name-btn" data-open="${c.id}">${c.name}</button></td>
+      <td><button class="name-btn" data-open="${c.id}">${esc(c.name)}</button></td>
       <td><span class="tier${adv ? " adv" : ""}">${(c.priority || "").replace(/^P(\d) - /, "P$1 ")}</span></td>
       <td class="mono">${STAGE_SHORT[c.furthest] || "&mdash;"}</td>
       <td><span class="chips">${chips}</span></td>
     </tr>`;
   }).join("");
 
-  document.getElementById("worklist").innerHTML = `
+  document.getElementById("worklist-body").innerHTML = `
     <table class="wl">
-      <thead><tr>
-        <th>Company</th><th>Tier</th><th>Furthest stage</th><th>Fields</th>
-      </tr></thead>
+      <thead><tr><th>Company</th><th>Tier</th><th>Furthest stage</th><th>Fields</th></tr></thead>
       <tbody>${body}</tbody>
-    </table>`;
+    </table>
+    <p class="tbl-foot">${rows.length} compan${rows.length === 1 ? "y" : "ies"} · click a name for provenance</p>`;
 }
 
 /* ------------------------------------------------------------------ drawer */
@@ -1254,20 +2339,14 @@ function fmtValue(field, v) {
     if (n === 0) return "0 <span class=\"queue-note\">(genuinely zero)</span>";
     return "$" + (n / 1e6).toFixed(n >= 1e6 ? 1 : 2) + "M";
   }
-  return String(v);
+  return esc(v);
 }
 
 function openDrawer(eid) {
   const c = byId.get(Number(eid));
   if (!c) return;
   lastFocus = document.activeElement;
-
-  const perWeek = new Map();
-  c.obs.forEach(([wi, stage, bold, page]) => {
-    const cur = perWeek.get(wi);
-    if (!cur || stage > cur.stage) perWeek.set(wi, { stage, bold, page });
-    else if (cur) cur.bold = cur.bold || bold;
-  });
+  const perWeek = c._perWeek;
 
   const steps = weeks.map((m, i) => {
     if (m.status !== "held") return '<span class="step void"></span>';
@@ -1277,27 +2356,26 @@ function openDrawer(eid) {
     return `<span class="step"><i data-stage="${o.stage}" style="height:${h}px"></i></span>`;
   }).join("");
 
-  const tl = weeks.filter((m, i) => m.status !== "held" || perWeek.has(i))
-    .map(m => {
-      const i = weeks.indexOf(m);
-      if (m.status !== "held") {
-        return `<div class="tl-row absent">
-          <span class="tl-date">${m.date}</span>
-          <span>no slide extracted</span><span></span></div>`;
-      }
-      const o = perWeek.get(i);
-      return `<div class="tl-row">
+  const tl = weeks.map((m, i) => {
+    if (m.status !== "held") {
+      return `<div class="tl-row absent">
         <span class="tl-date">${m.date}</span>
-        <span class="${o.bold ? "tl-bold" : ""}">${STAGE_SHORT[o.stage]}${o.bold ? " &middot; bold" : ""}</span>
-        <span class="tl-page">p.${o.page}</span></div>`;
-    }).join("");
+        <span>no slide extracted</span><span></span></div>`;
+    }
+    const o = perWeek.get(i);
+    if (!o) return "";
+    return `<div class="tl-row">
+      <span class="tl-date">${m.date}</span>
+      <span class="${o.bold ? "tl-bold" : ""}">${STAGE_SHORT[o.stage]}${o.bold ? " &middot; bold" : ""}</span>
+      <span class="tl-page">p.${o.page}</span></div>`;
+  }).join("");
 
   const fields = c.fields
     .filter(([f]) => f !== "legacy_company_id")
     .map(([f, v, src, cite]) => `<tr>
-      <td class="k">${f}</td>
-      <td>${fmtValue(f, v)}<span class="src" data-src="${src}">${src}</span>
-        ${cite ? `<div class="queue-note">${cite}</div>` : ""}</td>
+      <td class="k">${esc(f)}</td>
+      <td>${fmtValue(f, v)}<span class="src" data-src="${esc(src)}">${esc(src)}</span>
+        ${cite ? `<div class="queue-note">${esc(cite)}</div>` : ""}</td>
     </tr>`).join("");
 
   const gapRows = Object.keys(FIELD_LABEL).map(f => {
@@ -1314,13 +2392,13 @@ function openDrawer(eid) {
   drawer.innerHTML = `
     <div class="drawer-head">
       <div>
-        <h2>${c.name}</h2>
-        <div class="domain">${c.domain || "no domain on record"}</div>
+        <h2>${esc(c.name)}</h2>
+        <div class="domain">${esc(c.domain) || "no domain on record"}</div>
       </div>
       <button class="close" id="close-drawer" aria-label="Close">&times;</button>
     </div>
 
-    ${c.phantom ? `<p class="note">Marked as a phantom row: ${c.phantomReason}.
+    ${c.phantom ? `<p class="note">Marked as a phantom row: ${esc(c.phantomReason)}.
        The observations below are kept so the extraction stays auditable.</p>` : ""}
 
     <h3>Position over time</h3>
@@ -1328,11 +2406,12 @@ function openDrawer(eid) {
     <div class="queue-note" style="margin-top:6px">
       ${c.appearances} appearance${c.appearances === 1 ? "" : "s"},
       ${c.first || "&mdash;"} to ${c.last || "&mdash;"};
+      latest ${STAGE_SHORT[c._latest] || "&mdash;"},
       furthest ${STAGE_SHORT[c.furthest] || "&mdash;"}${c.times ? `, bold ${c.times}&times;` : ", never bold"}
     </div>
 
     ${aliases.length ? `<h3>Also spelled</h3>
-      <div class="queue-note mono">${aliases.join(" &middot; ")}</div>` : ""}
+      <div class="queue-note mono">${aliases.map(esc).join(" &middot; ")}</div>` : ""}
 
     <h3>Fields and provenance</h3>
     <table class="kv">${fields || '<tr><td class="k">&mdash;</td><td>nothing recorded</td></tr>'}</table>
@@ -1364,13 +2443,50 @@ function closeDrawer() {
 document.addEventListener("click", e => {
   const open = e.target.closest("[data-open]");
   if (open) { openDrawer(open.dataset.open); return; }
+
+  const tab = e.target.closest("[data-tab]");
+  if (tab) { showPanel(tab.dataset.tab); return; }
+
+  const cat = e.target.closest("[data-cat]");
+  if (cat) {
+    activeCat = cat.dataset.cat === "all" ? "all" : Number(cat.dataset.cat);
+    renderCatbar();
+    renderCompanies();
+    writeHash();
+    return;
+  }
+
+  const basis = e.target.closest("[data-basis]");
+  if (basis) {
+    activeBasis = basis.dataset.basis;
+    renderCatbar();
+    renderCompanies();
+    return;
+  }
+
+  const th = e.target.closest("th[data-sort]");
+  if (th) {
+    if (sortKey === th.dataset.sort) sortDir = -sortDir;
+    else { sortKey = th.dataset.sort; sortDir = th.dataset.sort === "name" ? 1 : -1; }
+    renderCompanies();
+    return;
+  }
+
   const view = e.target.closest("[data-view]");
   if (view) {
     activeView = VIEWS.find(v => v.key === view.dataset.view) || VIEWS[0];
     renderViews();
     renderTrace();
-    readoutBase = document.getElementById("readout").innerHTML;
   }
+});
+
+// Arrow keys walk the tab strips, as a tablist should.
+document.getElementById("tabs").addEventListener("keydown", e => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const i = PANELS.indexOf(activePanel);
+  const next = PANELS[(i + (e.key === "ArrowRight" ? 1 : PANELS.length - 1)) % PANELS.length];
+  showPanel(next);
+  document.getElementById("tab-" + next).focus();
 });
 
 scrim.addEventListener("click", closeDrawer);
@@ -1379,20 +2495,37 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && drawer.classList.contains("open")) closeDrawer();
 });
 
+document.getElementById("co-search").addEventListener("input", e => {
+  coFilter = e.target.value;
+  renderCompanies();
+});
+
 document.getElementById("search").addEventListener("input", e => {
   filterText = e.target.value;
   renderWorklist();
 });
 
+window.addEventListener("hashchange", readHash);
+
 /* --------------------------------------------------------------------- go */
 
 renderVitals();
+renderCatbar();
+renderCompanies();
+renderFunnel();
+renderAttention();
+renderMix();
+renderNew();
+renderCoverage();
+renderDwell();
+renderRecon();
 renderViews();
-renderTrace();
 renderLegend();
 renderQueue();
 renderWorklist();
-readoutBase = document.getElementById("readout").innerHTML;
+showPanel("pipeline", false);
+readHash();
+if (activePanel === "pipeline") { renderCatbar(); renderCompanies(); }
 </script>
 </body>
 </html>
