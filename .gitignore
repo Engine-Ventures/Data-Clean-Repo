@@ -9,3 +9,8 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# Deal data — confidential, and never the system of record.
+# data/raw/ holds the source workbook, the Affinity export and the slide PDF;
+# data/pipeline.db is rebuilt from them by scripts/build_db.py. See README.
+data/

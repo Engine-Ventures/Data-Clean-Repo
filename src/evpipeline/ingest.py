@@ -261,8 +261,10 @@ def _domain_conflicts(conn: sqlite3.Connection) -> None:
                 (
                     other,
                     keep,
-                    f"shares domain {r['domain']}; "
-                    f"{names[keep]!r} scores as the fuller spelling",
+                    (
+                        f"shares domain {r['domain']}; "
+                        f"{names[keep]!r} scores as the fuller spelling"
+                    ),
                     INGEST_USER,
                 ),
             )
