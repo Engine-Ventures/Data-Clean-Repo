@@ -14,3 +14,9 @@ __pycache__/
 # data/raw/ holds the source workbook, the Affinity export and the slide PDF;
 # data/pipeline.db is rebuilt from them by scripts/build_db.py. See README.
 data/
+
+# Generated workbench. It inlines the whole database snapshot — company names,
+# owner emails, round sizes — because a browser blocks fetch() over file://,
+# so the data cannot live in a separate file. Commit ui/template.html and
+# scripts/build_ui.py; rebuild the output with `python scripts/build_ui.py`.
+ui/index.html
