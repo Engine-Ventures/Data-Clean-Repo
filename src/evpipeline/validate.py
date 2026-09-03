@@ -26,6 +26,17 @@ DATE_FIELDS = {
 # Set on an entity whose relationship predates the slide extraction window.
 PREDATES_FLAG = "relationship_predates_crm"
 
+# Fields carried as a number rather than text. A numeric field stores its value
+# in value_num and leaves value_text NULL, so that "0" and "unknown" stay
+# distinguishable (§8): an explicit zero is value_num=0 with is_zero set, and an
+# unknown is simply no current row at all.
+NUMERIC_FIELDS = {"round_size_usd"}
+
+# Stripped before a numeric field is parsed. Someone typing a round size into a
+# form types "$4,000,000", and rejecting that would be pedantry rather than
+# validation.
+_NUM_STRIP = re.compile(r"[$,\s]")
+
 
 class ValidationError(ValueError):
     """Raised when a write would violate a §8 rule."""
@@ -173,6 +184,65 @@ def run_all_warnings(conn: sqlite3.Connection) -> list[Warning_]:
 # Validated write
 # ---------------------------------------------------------------------------
 
+def _coerce(field: str, raw: str) -> tuple[str | None, float | None, bool]:
+    """One raw form string as the (value_text, value_num, is_zero) triple.
+
+    Text fields pass through untouched. A numeric field is parsed here rather
+    than at the call site so that every entry point -- the add form, --batch,
+    the ingest -- agrees on what "4,000,000", "$0" and "unknown" mean, and so
+    the zero-vs-unknown distinction is made once.
+    """
+    raw = str(raw).strip()
+    if field not in NUMERIC_FIELDS:
+        return (raw or None), None, False
+    if not raw:
+        return None, None, False
+    try:
+        num = float(_NUM_STRIP.sub("", raw))
+    except ValueError:
+        raise ValidationError(f"{field} takes a number; {raw!r} is not one") from None
+    if num < 0:
+        raise ValidationError(f"{field} cannot be negative ({raw!r})")
+    # An explicit zero is a fact ("this round raised nothing"), and is flagged
+    # so it can never be read back as a missing value.
+    return None, num, num == 0
+
+
+def validate_field_write(
+    conn: sqlite3.Connection,
+    entity_id: int,
+    field: str,
+    value: str | None,
+    source: str,
+    citation: str | None = None,
+    value_num: float | None = None,
+    is_zero: bool = False,
+) -> None:
+    """Every §8 rule that applies to one field write, and nothing else.
+
+    Split out of `write_field` so a caller creating several fields at once can
+    check them all before committing any. `write_field` calls it, so there is
+    still exactly one place a rule is stated.
+
+    `entity_id` may be 0 for a row that does not exist yet; only
+    `check_first_meeting_order` reads it, and a first_meeting write against a
+    nonexistent entity has no prior meeting to be out of order with.
+    """
+    check_iso_date(field, value)
+    if value_num is not None or is_zero:
+        check_zero_vs_unknown(value_num, is_zero)
+    if field == "affinity_status":
+        check_enum(conn, "affinity_status", value)
+    elif field == "working_group":
+        check_enum(conn, "working_group", value)
+    elif field == "stage":
+        check_enum(conn, "round_stage", value)
+    if field == "first_meeting":
+        check_first_meeting_order(conn, entity_id, value)
+    if source == "Public" and not citation:
+        raise ValidationError("public enrichment requires a citation")
+
+
 def write_field(
     conn: sqlite3.Connection,
     entity_id: int,
@@ -189,19 +259,10 @@ def write_field(
     Supersedes the previous current value rather than updating in place, so
     field_value stays append-only and the provenance history is complete.
     """
-    check_iso_date(field, value)
-    if value_num is not None or is_zero:
-        check_zero_vs_unknown(value_num, is_zero)
-    if field == "affinity_status":
-        check_enum(conn, "affinity_status", value)
-    elif field == "working_group":
-        check_enum(conn, "working_group", value)
-    elif field == "stage":
-        check_enum(conn, "round_stage", value)
-    if field == "first_meeting":
-        check_first_meeting_order(conn, entity_id, value)
-    if source == "Public" and not citation:
-        raise ValidationError("public enrichment requires a citation")
+    validate_field_write(
+        conn, entity_id, field, value, source,
+        citation=citation, value_num=value_num, is_zero=is_zero,
+    )
 
     conn.execute(
         "UPDATE field_value SET superseded_at = datetime('now') "

@@ -29,7 +29,12 @@
   --graphite:   #6B7370;
   --hairline:   #C6CCC5;
 
-  /* Stage ramp, index = stage_id. Diligence stages only (4-7). */
+  /* Stage ramp, index = stage_id. The four diligence rungs carry the warm
+     ramp so a climb reads as a climb; the three pre-diligence categories are
+     held to neutrals so they never read as part of it. */
+  --s1: #7C8B93;  /* Meetings This Week  -- slate */
+  --s2: #5E8C7B;  /* NewCo / Fellows     -- sage */
+  --s3: #8A8477;  /* Hold / Nurture      -- stone */
   --s4: #A89043;  /* Preliminary Dil     -- brass */
   --s5: #C4762E;  /* Deep Diligence      -- copper */
   --s6: #A2512B;  /* Negotiate / Offer   -- ember, browner */
@@ -54,6 +59,9 @@
     --ink:        #E8EBE7;
     --graphite:   #939C98;
     --hairline:   #2E353A;
+    --s1: #93A3AB;
+    --s2: #6FA391;
+    --s3: #9E978A;
     --s4: #B99C42;
     --s5: #D4802F;
     --s6: #A85234;
@@ -1646,8 +1654,8 @@ button {
           <span class="mono">New Deals / 02. Companies</span> &mdash; the
           closest thing EV has to a list of every company it has opened a file
           on. Each is looked for in the two records this repo is built from:
-          the whole <b>deal meeting deck</b>, all 153 meetings of it, and the
-          <b>Affinity</b> export. <b>N</b> in both columns is the half worth
+          the <b>deal slides</b> this repo extracted, and the <b>Affinity</b>
+          export. <b>N</b> in both columns is the half worth
           reading &mdash; material in storage for a company that never reached
           a slide and has no CRM record. Both joins are on name, because the
           index carries no domain and no entity id, so every Y carries the name
@@ -1958,12 +1966,17 @@ button {
 
 const DATA = JSON.parse(document.getElementById("payload").textContent);
 
-const STAGE_SHORT = {
-  4: "Prelim Diligence",
-  5: "Deep Diligence",
-  6: "Negotiate / Offer",
-  7: "Legal / Def Docs",
+/* Short labels for the category chips, keyed by the canonical stage name
+   rather than the id -- ids are assigned at build time and have already been
+   renumbered once, which is how stages 1-3 came to render as `undefined`.
+   Anything not abbreviated here keeps the name the payload carries. */
+const STAGE_ABBREV = {
+  "Preliminary Diligence": "Prelim Diligence",
+  "Legal Diligence / Def Docs": "Legal / Def Docs",
 };
+
+const STAGE_SHORT = Object.fromEntries(
+  DATA.stages.map(s => [s.id, STAGE_ABBREV[s.name] || s.name]));
 
 const FIELD_LABEL = {
   website: "website",
@@ -3123,16 +3136,26 @@ function renderDrive() {
     || (r.desc || "").toLowerCase().includes(q));
 
   const win = meta.loadedWindow || [];
+  /* The deck clause only when a deck was actually read. Without one the slide
+     side is the extracted cohort alone, and saying so is the difference between
+     an N that means "never on a slide" and one that means "not in the window
+     this file covers". */
+  const slideSrc = meta.slidesFile
+    ? ` · deck: ${esc(meta.slidesFile)}, ${meta.slidePages} pages, `
+      + `${meta.slideMeetings} meetings `
+      + (meta.slideWindow ? `${meta.slideWindow[0]} – ${meta.slideWindow[1]}` : "")
+      + ` · <span class="mono">slide_observation</span> covers `
+      + `${meta.loadedMeetings} of them, from ${win[0] || "?"}`
+    : ` · slides: the extracted cohort of ${meta.cohort} over `
+      + `${meta.loadedMeetings} meeting${meta.loadedMeetings === 1 ? "" : "s"}`
+      + (win.length ? `, ${win[0]} – ${win[1]}` : "")
+      + " — a company outside it reads N, not never-seen";
   document.getElementById("drive-def").innerHTML =
     `<b>${c.either}</b> of <b>${n}</b> index companies are visible in one of the `
     + `two records, <b>${c.neither}</b> in neither`
     + (c.weak ? `; <b>${c.weak}</b> of those turn up in the deck under a name too `
         + "short to count as a match" : "")
-    + ` · deck: ${esc(meta.slidesFile)}, ${meta.slidePages} pages, `
-    + `${meta.slideMeetings} meetings `
-    + (meta.slideWindow ? `${meta.slideWindow[0]} – ${meta.slideWindow[1]}` : "")
-    + ` · <span class="mono">slide_observation</span> covers `
-    + `${meta.loadedMeetings} of them, from ${win[0] || "?"}`
+    + slideSrc
     + ` · CRM: ${meta.affinityRecords} Affinity organisations`
     + ` · index: ${esc(meta.file)}${meta.version ? " · " + esc(meta.version) : ""}`;
 

@@ -74,6 +74,13 @@ AFFINITY = DATA / "3._Deal_Flow_unsaved_view__export_Sep-02-2026 (2).csv"
 SHEET = "New Deals Companies"
 GUIDE = "Sector codes & guide"
 
+# The built interface. The slide side of the join is whatever cohort this
+# file carries, per the CAVEAT above, so it is the input rather than the
+# database even when a caller has a live connection to hand.
+BUILT = REPO_ROOT / "ui" / "index.html"
+
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
 PAYLOAD_RE = re.compile(r'(<script id="payload"[^>]*>)(.*?)(</script>)', re.DOTALL)
 
 # Dropped before a suffix-tier comparison. Corporate forms and the descriptor
@@ -98,6 +105,26 @@ def norm(s: object) -> str:
 def stripped(n: str) -> str:
     tokens = [t for t in n.split() if t not in SUFFIX_TOKENS]
     return " ".join(tokens) if tokens else n
+
+
+def iso_date(v: object) -> str | None:
+    """A date as YYYY-MM-DD, whatever the export wrote it as.
+
+    Affinity exports MM/DD/YYYY. Everything else in the payload is ISO, and a
+    row mixing the two invites a reader to parse 09/02/2026 as 9 February.
+    """
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    if ISO_DATE.match(s[:10]):
+        return s[:10]
+    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})", s)
+    if m:
+        mo, d, y = m.groups()
+        return f"{y}-{int(mo):02d}-{int(d):02d}"
+    return None
 
 
 def cell(row, col):
@@ -220,6 +247,9 @@ def load_affinity(path: Path) -> Target:
             "stage": cell(r, "Stage"),
             "owner": (cell(r, "Engine Team") or "").split("<")[0].strip() or None,
             "added": cell(r, "Date Added"),
+            # Shown on the row, because "in Affinity" and "in Affinity and
+            # actually met" are different findings about a folder.
+            "lastMeeting": iso_date(cell(r, "Last Meeting")),
         })
     return target
 
@@ -253,35 +283,73 @@ def verdict(tier: str, rec: dict | None, cands: list[str]) -> dict | None:
     return None
 
 
-def apply(payload: dict, folders: list[dict], version: str,
-          affinity: Target, slides: Target) -> Counter:
-    rows = []
-    segments: Counter = Counter()
-    aff_tiers: Counter = Counter()
-    slide_tiers: Counter = Counter()
+def _slide_verdict(tier: str, rec: dict | None, cands: list[str],
+                   window: list[str] | None) -> dict | None:
+    """The `slides` half of one index row, in the shape the tab reads.
 
-    for f in folders:
-        a_tier, a_rec, a_cands = affinity.match([f["name"]])
-        s_tier, s_rec, s_cands = slides.match([f["name"]])
-        aff_tiers[a_tier] += 1
-        slide_tiers[s_tier] += 1
+    `how` is what the tab tests, not the tier: a tier says how hard the name
+    match was, `how` says what kind of record was matched. Only `entity` is
+    available here -- a name the pipeline itself holds. The design also allows
+    `deck` and `weak` for names found in the deck's raw text outside the
+    extracted window; nothing in this repo reads the deck, so no row is ever
+    given one, rather than a text match being invented to fill the column.
+    """
+    if rec is not None:
+        last = rec.get("last")
+        return {
+            "how": "entity",
+            "tier": tier,
+            "as": rec["name"],
+            "entity": rec.get("id"),
+            "observations": rec.get("appearances") or 0,
+            "last": last,
+            # True for every cohort company in the ordinary case, since the
+            # cohort is drawn from the loaded window. Computed rather than
+            # assumed so a company carried in from outside it cannot read as
+            # current.
+            "loaded": bool(last and window and window[0] <= last <= window[1]),
+        }
+    if tier == "ambiguous":
+        return {"how": "ambiguous", "candidates": cands}
+    return None
 
-        in_aff = a_tier in HIT_TIERS
-        in_slides = s_tier in HIT_TIERS
-        segment = ("both" if in_aff and in_slides else
-                   "affinity" if in_aff else
-                   "slides" if in_slides else "neither")
-        segments[segment] += 1
 
-        rows.append({
-            "folder": f,
-            "segment": segment,
-            "affinity": verdict(a_tier, a_rec, a_cands),
-            "slides": verdict(s_tier, s_rec, s_cands),
-        })
+def _crm_verdict(tier: str, rec: dict | None, cands: list[str]) -> dict | None:
+    """The `crm` half of one index row."""
+    if rec is not None:
+        return {
+            "how": "crm",
+            "tier": tier,
+            "name": rec["name"],
+            "status": rec.get("status"),
+            "lastMeeting": rec.get("lastMeeting"),
+        }
+    if tier == "ambiguous":
+        return {"how": "ambiguous", "candidates": cands}
+    return None
 
-    # Reverse annotation, unchanged in meaning: which folder backs each cohort
-    # company. Derived from the same matches so the two directions cannot drift.
+
+def verdict(tier: str, rec: dict | None, cands: list[str]) -> dict | None:
+    """The reverse annotation: which folder backs a cohort company."""
+    if rec is not None:
+        return {"tier": tier, **rec}
+    if tier == "ambiguous":
+        return {"tier": "ambiguous", "candidates": cands}
+    return None
+
+
+def loaded_window(payload: dict) -> list[str] | None:
+    """[first, last] meeting date the interface actually carries."""
+    dates = sorted(m["date"] for m in payload.get("meetings", []) if m.get("date"))
+    return [dates[0], dates[-1]] if dates else None
+
+
+def annotate(payload: dict, folders: list[dict]) -> Counter:
+    """Give every cohort company the folder that backs it.
+
+    Derived from the same ladder as the forward join, so the two directions
+    cannot drift.
+    """
     folder_target = Target("index")
     for f in folders:
         folder_target.add(f["name"], f)
@@ -293,17 +361,88 @@ def apply(payload: dict, folders: list[dict], version: str,
         tier, rec, cands = folder_target.match([c["name"], *own])
         back[tier] += 1
         c["idx"] = verdict(tier, rec, cands)
+    return back
 
-    payload["indexRows"] = rows
-    payload["driveIndex"] = {
-        "file": INDEX.name,
+
+def reach(payload: dict | None = None, *, index: Path = INDEX,
+          affinity: Path = AFFINITY, verbose: bool = False) -> dict:
+    """The index-reach join as the `indexReach` payload the tab renders.
+
+    One row per index folder, each carrying two independent verdicts and the
+    evidence for them, plus the counts the tab's vitals read. This is the whole
+    of what the Record coverage tab needs: hand the return value to the payload
+    as `indexReach` and the tab renders.
+
+    `payload` is a built interface's payload, whose cohort is the slide side of
+    the join. With none, the snapshot at `BUILT` is read -- which is what
+    `scripts/serve.py` does, since the join depends on the index workbook, the
+    Affinity export and the built cohort, and on nothing a browser write can
+    change. When a payload *is* given it also gets the reverse annotation.
+
+    Raises FileNotFoundError if a source is missing, rather than returning a
+    half-join that would read as a real result with everything absent.
+    """
+    for path in (index, affinity):
+        if not path.exists():
+            raise FileNotFoundError(path)
+
+    if payload is None:
+        if not BUILT.exists():
+            raise FileNotFoundError(BUILT)
+        m = PAYLOAD_RE.search(BUILT.read_text())
+        if not m:
+            raise FileNotFoundError(f"no inlined payload in {BUILT}")
+        payload = json.loads(m.group(2))
+
+    folders, version = load_index(index)
+    crm = load_affinity(affinity)
+    slides = slide_target(payload)
+    window = loaded_window(payload)
+
+    rows = []
+    counts: Counter = Counter()
+    segments: Counter = Counter()
+    aff_tiers: Counter = Counter()
+    slide_tiers: Counter = Counter()
+
+    for f in folders:
+        s_tier, s_rec, s_cands = slides.match([f["name"]])
+        a_tier, a_rec, a_cands = crm.match([f["name"]])
+        slide_tiers[s_tier] += 1
+        aff_tiers[a_tier] += 1
+
+        on_slides = s_tier in HIT_TIERS
+        in_crm = a_tier in HIT_TIERS
+        counts["slides"] += on_slides
+        counts["affinity"] += in_crm
+        counts["both"] += on_slides and in_crm
+        counts["either"] += on_slides or in_crm
+        counts["neither"] += not (on_slides or in_crm)
+        segments[("both" if on_slides and in_crm else
+                  "affinity" if in_crm else
+                  "slides" if on_slides else "neither")] += 1
+
+        rows.append({
+            **f,
+            "slides": _slide_verdict(s_tier, s_rec, s_cands, window),
+            "crm": _crm_verdict(a_tier, a_rec, a_cands),
+        })
+
+    back = annotate(payload, folders)
+
+    meta = {
+        "file": index.name,
         "sheet": SHEET,
         "version": version,
         "folders": len(folders),
-        "affinityFile": AFFINITY.name,
-        "affinityOrgs": len(affinity.by_key),
+        "affinityFile": affinity.name,
+        "affinityRecords": len(crm.by_key),
         "cohort": len(payload["companies"]),
         "cohortNote": payload.get("screen", {}).get("cohort"),
+        "loadedMeetings": len(payload.get("meetings", [])),
+        "loadedWindow": window,
+        "rows": rows,
+        "counts": dict(counts),
         "segments": dict(segments),
         "affinityTiers": dict(aff_tiers),
         "slideTiers": dict(slide_tiers),
@@ -311,7 +450,12 @@ def apply(payload: dict, folders: list[dict], version: str,
         "matched": sum(v for k, v in back.items() if k in HIT_TIERS),
         "tiers": dict(back),
     }
-    return segments
+
+    if verbose:
+        c = meta["counts"]
+        print(f"index reach: {c['either']} of {len(folders)} folders visible "
+              f"({c['neither']} in neither)", file=sys.stderr)
+    return meta
 
 
 def main() -> int:
@@ -338,26 +482,29 @@ def main() -> int:
         return 1
 
     payload = json.loads(m.group(2))
-    folders, version = load_index(args.index)
-    affinity = load_affinity(args.affinity)
-    slides = slide_target(payload)
-    segments = apply(payload, folders, version, affinity, slides)
+    meta = reach(payload, index=args.index, affinity=args.affinity)
+    # The previous shape, which nothing reads now that the tab is on
+    # `indexReach`. Dropped rather than written alongside it: two copies of 982
+    # rows in one file is a megabyte of payload that can disagree with itself.
+    payload.pop("indexRows", None)
+    payload.pop("driveIndex", None)
+    payload["indexReach"] = meta
+    segments = meta["segments"]
 
     body = json.dumps(payload, separators=(",", ":"))
     dst.write_text(html[:m.start(2)] + body + html[m.end(2):])
 
-    di = payload["driveIndex"]
-    total = di["folders"]
+    total = meta["folders"]
     print(f"wrote {dst.relative_to(REPO_ROOT)}  ({dst.stat().st_size / 1024:.0f} KB)")
-    print(f"  index:    {total} folders, version {version or 'unknown'}")
-    print(f"  affinity: {di['affinityOrgs']} organisations")
-    print(f"  slides:   {di['cohort']} companies in the built cohort")
+    print(f"  index:    {total} folders, version {meta['version'] or 'unknown'}")
+    print(f"  affinity: {meta['affinityRecords']} organisations")
+    print(f"  slides:   {meta['cohort']} companies in the built cohort")
     print(f"  of {total} indexed folders:")
     for seg, label in (("both", "in Affinity and on slides"),
                        ("affinity", "in Affinity only"),
                        ("slides", "on slides only"),
                        ("neither", "in neither")):
-        n = segments[seg]
+        n = segments.get(seg, 0)
         print(f"    {seg:9} {n:4}  ({n / total:5.1%})  {label}")
     return 0
 
