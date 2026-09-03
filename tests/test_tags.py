@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from evpipeline import connect, create_schema, tags
+from evpipeline.ingest import seed_vocab
 from evpipeline.metrics import GAP_FIELDS, coverage_report, gap_counts
 from evpipeline.validate import ValidationError
 from evpipeline.write import add_company, read_tags, set_tags
@@ -14,6 +15,7 @@ from evpipeline.write import add_company, read_tags, set_tags
 def db(tmp_path):
     c = connect(tmp_path / "t.db")
     create_schema(c)
+    seed_vocab(c)  # round_stage etc. -- create_schema only makes the tables
     yield c
     c.close()
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from evpipeline import connect, create_schema
+from evpipeline.ingest import seed_vocab
 from evpipeline.metrics import GAP_FIELDS
 from evpipeline.validate import ValidationError
 from evpipeline.write import DuplicateName, add_company, domain_from_website, find_duplicates
@@ -15,6 +16,7 @@ def db(tmp_path):
     """An empty schema. These tests are about the write path, not the workbook."""
     c = connect(tmp_path / "t.db")
     create_schema(c)
+    seed_vocab(c)  # round_stage etc. -- create_schema only makes the tables
     yield c
     c.close()
 
