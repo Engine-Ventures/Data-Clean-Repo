@@ -985,6 +985,18 @@ button {
 
 .defline b { color: var(--ink); font-weight: 600; }
 
+/* Provenance and scope note under a section blurb: the sources a join ran over
+   and what bounds the answer. Quieter than .defline, which carries the counts. */
+.caveat {
+  font-size: 11px;
+  color: var(--graphite);
+  margin: 8px 0 0;
+  max-width: 92ch;
+  line-height: 1.5;
+}
+
+.caveat b { color: var(--ink); font-weight: 600; }
+
 /* ==========================================================================
    Company table
    ========================================================================== */
@@ -1311,7 +1323,7 @@ button {
       <button class="tab" role="tab" data-tab="pipeline" id="tab-pipeline"
               aria-controls="panel-pipeline">Companies <span class="n" id="tabn-pipeline"></span></button>
       <button class="tab" role="tab" data-tab="drive" id="tab-drive"
-              aria-controls="panel-drive">Drive index <span class="n" id="tabn-drive"></span></button>
+              aria-controls="panel-drive">Index cross-check <span class="n" id="tabn-drive"></span></button>
       <button class="tab" role="tab" data-tab="trends" id="tab-trends"
               aria-controls="panel-trends">Trends</button>
       <button class="tab" role="tab" data-tab="review" id="tab-review"
@@ -1364,16 +1376,19 @@ button {
     <div class="section-head">
       <div>
         <span class="eyebrow">Storage overlap</span>
-        <h2>In the New Deals companies index?</h2>
+        <h2>How much of the index reached the pipeline?</h2>
         <p>
-          Every company in this cohort — which is the slide extraction plus
-          Affinity enrichment — against the index of company folders under
-          <span class="mono">New Deals / 02. Companies</span>. <b>Y</b> means EV
-          already holds a folder for it; <b>N</b> means the deal reached
-          diligence with nothing in storage under that name, which is the half
-          worth reading. The join is on name and each Y carries the folder it
-          matched and how, because slide spellings are not folder names.
+          Every company folder under
+          <span class="mono">New Deals / 02. Companies</span> — the whole index,
+          one row each — against the two systems that record a live deal:
+          <b>Affinity</b> and the <b>new deal slides</b>. A folder in both is a
+          company EV worked and tracked. A folder in <b>neither</b> is storage
+          carried for something that never entered the pipeline under that name,
+          which is the half worth reading. The join is on name, because the index
+          carries no domain or entity id, so each hit shows what it matched and
+          how.
         </p>
+        <p class="caveat" id="drive-caveat"></p>
       </div>
       <input class="search" id="drive-search" type="search"
              placeholder="filter by name" aria-label="Filter by company name">
@@ -1381,10 +1396,12 @@ button {
 
     <div class="controls">
       <span class="control-label">Show</span>
-      <span class="seg" id="drive-filter" role="group" aria-label="Filter by index membership">
+      <span class="seg" id="drive-filter" role="group" aria-label="Filter by pipeline membership">
         <button class="view-btn" data-drive="all">all</button>
-        <button class="view-btn" data-drive="y">in the index</button>
-        <button class="view-btn" data-drive="n">not in it</button>
+        <button class="view-btn" data-drive="both">in both</button>
+        <button class="view-btn" data-drive="affinity">Affinity only</button>
+        <button class="view-btn" data-drive="slides">slides only</button>
+        <button class="view-btn" data-drive="neither">in neither</button>
       </span>
     </div>
 
@@ -1663,7 +1680,7 @@ function renderVitals() {
   document.getElementById("tabn-pipeline").textContent = t.entities;
   document.getElementById("tabn-review").textContent = t.reviewOpen;
   document.getElementById("tabn-drive").textContent = DATA.driveIndex
-    ? DATA.driveIndex.matched : "";
+    ? DATA.driveIndex.folders : "";
   document.getElementById("tabn-worklist").textContent =
     DATA.companies.filter(c => c.priority && c.priority.startsWith("P1")).length;
 }
@@ -2382,13 +2399,41 @@ const MATCH_NOTE = {
 let driveFilter = "all";
 let driveText = "";
 
+const SEGMENT_LABEL = {
+  both:     "in Affinity and on the slides",
+  affinity: "in Affinity, never on a slide",
+  slides:   "on a slide, not in the Affinity export",
+  neither:  "in neither — folder only",
+};
+
+// One side of one index row: the Y/N chip plus what it matched and how.
+function sideCells(v, absent) {
+  const ambiguous = v && v.tier === "ambiguous";
+  const hit = v && !ambiguous;
+  const chip = ambiguous
+    ? '<span class="chip confirmed" title="matches more than one record">?</span>'
+    : hit ? '<span class="chip has">Y</span>'
+          : '<span class="chip gap">N</span>';
+  const what = ambiguous
+    ? `<span class="queue-detail">${v.candidates.map(esc).join(" · ")}</span>`
+    : hit
+      ? esc(v.name)
+        + `<div class="queue-detail"><span class="tier" title="${esc(MATCH_NOTE[v.tier])}">${
+            v.tier}</span>${v.status ? " · " + esc(v.status) : ""}${
+            v.appearances ? ` · ${v.appearances} slide${v.appearances === 1 ? "" : "s"}` : ""}</div>`
+      : `<span class="queue-detail">${esc(absent)}</span>`;
+  return `<td>${chip}</td><td>${what}</td>`;
+}
+
 function renderDrive() {
   const meta = DATA.driveIndex;
-  if (!meta) {
+  const rowsAll = DATA.indexRows;
+  if (!meta || !rowsAll) {
     document.getElementById("drive-table").innerHTML =
-      '<p class="empty">No index join in this file. Run <span class="mono">'
+      '<p class="empty">No index cross-check in this file. Run <span class="mono">'
       + 'python scripts/match_drive_index.py</span>.</p>';
     document.getElementById("drive-def").textContent = "";
+    document.getElementById("drive-caveat").textContent = "";
     document.getElementById("drive-foot").textContent = "";
     return;
   }
@@ -2398,70 +2443,64 @@ function renderDrive() {
   });
 
   const q = driveText.trim().toLowerCase();
-  let rows = DATA.companies.slice();
-  if (driveFilter === "y") rows = rows.filter(c => c.idx && c.idx.tier !== "ambiguous");
-  if (driveFilter === "n") rows = rows.filter(c => !c.idx);
-  if (q) rows = rows.filter(c => c.name.toLowerCase().includes(q));
-  rows.sort((a, b) => a.name.localeCompare(b.name));
+  let rows = rowsAll.slice();
+  if (driveFilter !== "all") rows = rows.filter(r => r.segment === driveFilter);
+  if (q) rows = rows.filter(r => r.folder.name.toLowerCase().includes(q));
+  rows.sort((a, b) => a.folder.name.localeCompare(b.folder.name));
 
-  const yes = DATA.companies.filter(c => c.idx && c.idx.tier !== "ambiguous").length;
-  const amb = DATA.companies.filter(c => c.idx && c.idx.tier === "ambiguous").length;
-  const no = DATA.companies.length - yes - amb;
+  const seg = meta.segments || {};
+  const total = meta.folders;
+  const pct = n => `${Math.round((n / total) * 100)}%`;
 
   document.getElementById("drive-def").innerHTML =
-    `<b>${yes}</b> of <b>${DATA.companies.length}</b> companies have a folder, `
-    + `<b>${no}</b> do not${amb ? `, <b>${amb}</b> match more than one` : ""} · `
-    + `index: ${esc(meta.file)} · ${meta.folders} folders`
-    + (meta.version ? ` · ${esc(meta.version)}` : "");
+    `Of <b>${total}</b> indexed folders: <b>${seg.both || 0}</b> (${pct(seg.both || 0)}) `
+    + `in both · <b>${seg.affinity || 0}</b> (${pct(seg.affinity || 0)}) Affinity only · `
+    + `<b>${seg.slides || 0}</b> (${pct(seg.slides || 0)}) slides only · `
+    + `<b>${seg.neither || 0}</b> (${pct(seg.neither || 0)}) neither`;
 
-  const body = rows.map(c => {
-    const x = c.idx;
-    const ambiguous = x && x.tier === "ambiguous";
-    const hit = x && !ambiguous;
-    const verdict = ambiguous
-      ? '<span class="chip confirmed" title="matches more than one folder">?</span>'
-      : hit ? '<span class="chip has">Y</span>'
-            : '<span class="chip gap">N</span>';
-    const folder = ambiguous
-      ? `<span class="queue-detail">${x.candidates.map(esc).join(" · ")}</span>`
-      : hit
-        ? esc(x.name) + (x.name === c.name ? "" :
-            `<div class="queue-detail mono">indexed as this, not “${esc(c.name)}”</div>`)
-        : "&mdash;";
+  document.getElementById("drive-caveat").innerHTML =
+    `Index: ${esc(meta.file)}${meta.version ? " · " + esc(meta.version) : ""} · `
+    + `Affinity: ${esc(meta.affinityFile)} · ${meta.affinityOrgs} organisations · `
+    + `slides: ${meta.cohort} companies`
+    + (meta.cohortNote
+        ? ` — <b>${esc(meta.cohortNote)}</b>, not the full slide population, so a `
+          + `“slides” N may be a company screened out upstream rather than one never presented`
+        : "");
+
+  const body = rows.map(r => {
+    const f = r.folder;
     return `<tr>
-      <td><button class="name-btn" data-open="${c.id}">${esc(c.name)}</button>${
-        c.domain ? `<div class="queue-detail mono">${esc(c.domain)}</div>` : ""}</td>
-      <td>${verdict}</td>
-      <td>${folder}</td>
-      <td><span class="tier" title="${esc(x ? MATCH_NOTE[x.tier] : "no folder under any recorded spelling")}">${
-        x ? x.tier : "&mdash;"}</span></td>
-      <td>${hit && x.portfolio ? '<span class="chip has">portfolio</span>' : "&mdash;"}</td>
-      <td>${hit && x.vertical ? esc(x.vertical) : "&mdash;"}${
-        hit && x.sectors ? `<div class="queue-detail">${esc(x.sectors)}</div>` : ""}</td>
-      <td class="mono">${hit && x.modified ? esc(x.modified) : "&mdash;"}</td>
-      <td>${stageCell(c.furthest)}</td>
+      <td>${esc(f.name)}${f.desc ? `<div class="queue-detail">${esc(f.desc)}</div>` : ""}</td>
+      ${sideCells(r.affinity, "no Affinity organisation under this name")}
+      ${sideCells(r.slides, "not on a slide under this name")}
+      <td><span class="tier" title="${esc(SEGMENT_LABEL[r.segment])}">${r.segment}</span></td>
+      <td>${f.portfolio ? '<span class="chip has">portfolio</span>' : "&mdash;"}</td>
+      <td>${f.vertical ? esc(f.vertical) : "&mdash;"}${
+        f.sectors ? `<div class="queue-detail">${esc(f.sectors)}</div>` : ""}</td>
+      <td class="mono">${f.modified ? esc(f.modified) : "&mdash;"}</td>
     </tr>`;
   }).join("");
 
   document.getElementById("drive-table").innerHTML = rows.length ? `
     <table class="wl co drive">
       <thead><tr>
-        <th>Company</th>
-        <th>In New&nbsp;Deals index?</th>
         <th>Indexed folder</th>
-        <th>How matched</th>
+        <th>In Affinity?</th>
+        <th>Affinity match</th>
+        <th>On slides?</th>
+        <th>Slide match</th>
+        <th>Segment</th>
         <th>Portfolio</th>
         <th>Vertical / sector</th>
         <th>Folder modified</th>
-        <th>Furthest stage</th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table>` : `<p class="empty">Nothing matches${
       q ? " “" + esc(driveText) + "”" : ""}.</p>`;
 
   document.getElementById("drive-foot").innerHTML =
-    `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} shown · `
-    + "click a name for its evidence log";
+    `<b>${rows.length}</b> ${rows.length === 1 ? "folder" : "folders"} shown`
+    + (driveFilter === "all" ? "" : ` · ${esc(SEGMENT_LABEL[driveFilter])}`);
 }
 
 /* ------------------------------------------------------------------ drawer */
