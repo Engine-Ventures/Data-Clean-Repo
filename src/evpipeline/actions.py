@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from .validate import ValidationError, check_new_entity, write_field
+from .validate import ValidationError
 
 REVIEW_STATES = {"open", "accepted", "rejected", "deferred"}
 
@@ -280,102 +280,18 @@ def accept_merge_proposal(conn: sqlite3.Connection, review_id: int, user: str) -
 # ---------------------------------------------------------------------------
 
 
-# Fields the intake form offers, with the picklist each is checked against.
-# Anything not listed is free text. `stage` is the funding round, not a funnel
-# position -- the funnel comes from slide observations and cannot be typed in.
-INTAKE_FIELDS = {
-    "website": None,
-    "hq_country": None,
-    "stage": "round_stage",
-    "round_size_usd": None,
-    "owner_name": None,
-    "affinity_status": "affinity_status",
-    "working_group": "working_group",
-    "source_channel": None,
-    "last_meeting": None,
-    "description": None,
-}
-
-
-def add_entity(
-    conn: sqlite3.Connection,
-    name: str,
-    domain: str,
-    user: str,
-    fields: list[dict] | None = None,
-) -> dict:
-    """Add a company that never appeared on a slide — the NewCo case.
-
-    A domain is required (§8): name-only records are what created the
-    fragmentation this layer exists to resolve.
-
-    `fields` is what the intake form collects: a list of
-    `{field, value, source, citation, is_zero}`. Each one goes through
-    `validate.write_field`, so the form cannot bypass a rule the rest of the
-    layer enforces — a public claim without a citation is refused, a value off
-    a locked picklist is refused, and a zero must say it means zero.
-
-    A field left blank is simply not written. That is the point of the
-    three-state rule: absent means nobody has looked, which is different from
-    a recorded zero and different again from "checked, genuinely unavailable".
-    """
-    name = name.strip()
-    if not name:
-        raise ValidationError("a company needs a name")
-    check_new_entity(domain)
-    domain = domain.strip().casefold()
-
-    clash = conn.execute(
-        "SELECT entity_id, canonical_name FROM entity WHERE domain = ?", (domain,)
-    ).fetchone()
-    if clash:
-        raise ValidationError(
-            f"domain {domain} already belongs to {clash['canonical_name']!r} "
-            f"(entity {clash['entity_id']})"
-        )
-
-    cur = conn.execute(
-        "INSERT INTO entity (canonical_name, domain) VALUES (?, ?)", (name, domain)
-    )
-    eid = int(cur.lastrowid)
-    from .ingest import norm_name
-
-    conn.execute(
-        "INSERT INTO alias (entity_id, alias_text, alias_norm, source, match_method) "
-        "VALUES (?, ?, ?, 'Manual', 'manual')",
-        (eid, name, norm_name(name)),
-    )
-    written, skipped = [], []
-    for item in fields or []:
-        field = item.get("field")
-        if field not in INTAKE_FIELDS:
-            raise ValidationError(f"{field!r} is not an intake field")
-
-        raw = item.get("value")
-        text = None if raw is None else str(raw).strip()
-        is_zero = bool(item.get("is_zero"))
-
-        if not text and not is_zero:
-            skipped.append(field)      # blank stays unknown, deliberately
-            continue
-
-        source = item.get("source") or "Manual"
-        citation = (item.get("citation") or "").strip() or None
-
-        if field == "round_size_usd":
-            num = 0.0 if is_zero else float(text)
-            write_field(conn, eid, field, None, source, user,
-                        citation=citation, value_num=num, is_zero=is_zero)
-        else:
-            write_field(conn, eid, field, text, source, user, citation=citation)
-        written.append(field)
-
-    conn.commit()
-    return {
-        "entity_id": eid,
-        "name": name,
-        "domain": domain,
-        "written": written,
-        "left_unknown": skipped,
-        "live_count": live_count(conn),
-    }
+# Adding a company by hand lives in write.py (add_company), adopted from
+# main: it does everything the version formerly here did, plus two things
+# that version got wrong or lacked --
+#
+#   * a hand-add could claim source="Affinity"/"Slides" on a value nobody
+#     extracted from either place. write.add_company restricts a hand-add to
+#     {Manual, Public} (ADD_SOURCES), which this module's tests exercised as
+#     valid input right up until the port -- the bug was real, not theoretical.
+#   * a same-name or same-domain collision was a hard block here. write.py
+#     warns and lets the caller proceed with allow_duplicate=True, filing a
+#     merge_proposal for a human to resolve (§9) instead of the caller having
+#     to search first and hope they searched correctly.
+#
+# "Nothing else inserts into entity" is write.py's own stated rule; keeping a
+# second write path here would be exactly the drift that rule exists to avoid.

@@ -662,27 +662,6 @@ button {
 .fr.empty .srcs { opacity: 0.35; }
 .fr.empty:focus-within .srcs { opacity: 1; }
 
-/* Zero is a value, not an absence -- Affinity's 0.0 round sizes were read as
-   unknown, and that is the mistake this checkbox exists to prevent. */
-.zero {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--graphite);
-  white-space: nowrap;
-  margin-top: 4px;
-}
-
-.zero input { width: auto; }
-
-.money { display: flex; align-items: center; gap: 6px; }
-.money .unit {
-  font-family: "Spline Sans Mono", ui-monospace, monospace;
-  font-size: 11px;
-  color: var(--graphite);
-}
-
 .cite { border-bottom: none; padding-top: 12px; }
 
 .intake-foot {
@@ -1773,12 +1752,6 @@ button {
           <span class="fl">Company name</span>
           <input name="name" required placeholder="Acme Fusion">
         </label>
-        <label class="fr">
-          <span class="fl">Domain</span>
-          <input name="domain" required placeholder="acmefusion.com">
-          <span class="fh">The match key. Names fragment across slides; domains
-            do not, so this is what keeps the company one company.</span>
-        </label>
       </div>
 
       <div class="intake-head">
@@ -1787,6 +1760,15 @@ button {
       </div>
 
       <div id="intake-fields"></div>
+
+      <label class="fr">
+        <span class="fl">Tags</span>
+        <input name="tags" placeholder="climate, hardware">
+        <span class="fh">Free text, comma-separated. Not a worklist field —
+          an untagged company is untagged, not incomplete.</span>
+      </label>
+
+      <div id="dupe-warning" hidden></div>
 
       <label class="fr cite" id="cite-row" hidden>
         <span class="fl">Citation</span>
@@ -3135,23 +3117,24 @@ document.addEventListener("keydown", e => {
 //
 // `pick` names a locked picklist fetched from the database rather than copied
 // here, so a dropdown option can never be something validate.py will reject.
+// The four fields write.add_company (src/evpipeline/write.py) accepts --
+// ADD_FIELDS there, in form order. round_size_usd is deliberately not one of
+// them: it is the one worklist field the form does not ask for, so it is
+// always created as an explicit gap rather than guessed at on day one.
+//
+// website is the one the domain comes from (domain_from_website), which is
+// what actually makes it required -- there is no separate domain field.
 const INTAKE = [
-  {f: "hq_country",     label: "Origin",         ph: "United States",  dflt: "Public"},
-  {f: "stage",          label: "Round stage",    pick: "round_stage",  dflt: "Affinity"},
-  {f: "round_size_usd", label: "Round size",     money: true,          dflt: "Affinity"},
-  {f: "website",        label: "Website",        ph: "https://…",      dflt: "Public"},
-  {f: "source_channel", label: "How we met",     ph: "Warm intro, conference, lab spinout…", dflt: "Manual"},
-  {f: "owner_name",     label: "Owner",          ph: "who runs it here", dflt: "Affinity"},
-  {f: "last_meeting",   label: "Last discussed", date: true,           dflt: "Affinity"},
-  {f: "affinity_status",label: "Status",         pick: "affinity_status", dflt: "Affinity"},
-  {f: "working_group",  label: "Working group",  pick: "working_group", dflt: "Affinity"},
-  {f: "description",    label: "In one line",    ph: "what they actually do", dflt: "Manual"},
+  {f: "website",    label: "Website",      ph: "https://…",       dflt: "Manual", required: true},
+  {f: "hq_country", label: "Origin",       ph: "United States",   dflt: "Public"},
+  {f: "stage",      label: "Round stage",  pick: "round_stage",   dflt: "Manual"},
+  {f: "owner_name", label: "Owner",        ph: "who runs it here", dflt: "Manual"},
 ];
 
-// Slides is offered but never the default: a company reaching this form is one
-// the slides do not carry, so claiming a slide as the source would be a lie in
-// the ordinary case. It stays available for a deck that predates the window.
-const SOURCES = ["Slides", "Affinity", "Public"];
+// A hand-add may only ever claim to be Manual or Public (write.ADD_SOURCES):
+// nobody extracted this from a slide or from Affinity, and offering those as
+// choices would let the form say so anyway.
+const SOURCES = ["Manual", "Public"];
 
 let VOCAB = {};
 
@@ -3173,28 +3156,17 @@ async function renderIntake() {
   }
 
   document.getElementById("intake-fields").innerHTML = INTAKE.map(d => {
-    let input;
-    if (d.pick) {
-      const opts = (VOCAB[d.pick] || []).map(o => `<option>${esc(o)}</option>`).join("");
-      input = `<select name="${d.f}"><option value=""></option>${opts}</select>`;
-    } else if (d.money) {
-      input = `<span class="money">
-          <span class="unit">$</span>
-          <input name="${d.f}" type="number" step="0.1" min="0" placeholder="4.5">
-          <span class="unit">million</span>
-        </span>
-        <label class="zero"><input type="checkbox" name="${d.f}__zero">
-          genuinely zero, not unknown</label>`;
-    } else if (d.date) {
-      input = `<input name="${d.f}" type="date">`;
-    } else {
-      input = `<input name="${d.f}" placeholder="${esc(d.ph || "")}">`;
-    }
+    const input = d.pick
+      ? `<select name="${d.f}"${d.required ? " required" : ""}>`
+        + `<option value=""></option>`
+        + (VOCAB[d.pick] || []).map(o => `<option>${esc(o)}</option>`).join("")
+        + `</select>`
+      : `<input name="${d.f}" placeholder="${esc(d.ph || "")}"${d.required ? " required" : ""}>`;
     const srcs = SOURCES.map(sc =>
       `<button type="button" class="src-opt" data-src="${d.f}" data-val="${sc}"
                aria-pressed="${sc === d.dflt}">${sc.toLowerCase()}</button>`).join("");
     return `<label class="fr empty" data-row="${d.f}">
-        <span class="fl">${esc(d.label)}</span>
+        <span class="fl">${esc(d.label)}${d.required ? " *" : ""}</span>
         <span>${input}</span>
         <span class="srcs">${srcs}</span>
       </label>`;
@@ -3223,8 +3195,7 @@ function syncIntake() {
     const row = form.querySelector(`[data-row="${d.f}"]`);
     if (!row) return;
     const el = form.elements[d.f];
-    const zero = form.elements[d.f + "__zero"];
-    const filled = (el && String(el.value).trim() !== "") || (zero && zero.checked);
+    const filled = el && String(el.value).trim() !== "";
     row.classList.toggle("empty", !filled);
     const chosen = row.querySelector('.src-opt[aria-pressed="true"]');
     if (filled && chosen && chosen.dataset.val === "Public") needsCite = true;
@@ -3236,42 +3207,87 @@ document.addEventListener("input", e => {
   if (e.target.closest("#intake")) syncIntake();
 });
 
-document.addEventListener("submit", async e => {
+// Duplicate handling is the one place intake does its own fetch instead of
+// going through act(): a 409 here is not always the end of the story -- the
+// caller may want to see who it matched and proceed anyway -- so the body
+// needs reading whether or not the request succeeded, and act() only ever
+// returns the parsed JSON on success.
+async function submitCompany(form, allowDuplicate) {
+  const values = {};
+  const fieldSources = {};
+  INTAKE.forEach(d => {
+    const el = form.elements[d.f];
+    const v = el ? el.value.trim() : "";
+    if (!v) return;
+    values[d.f] = v;
+    const row = form.querySelector(`[data-row="${d.f}"]`);
+    const chosen = row?.querySelector('.src-opt[aria-pressed="true"]');
+    if (chosen && chosen.dataset.val === "Public") {
+      fieldSources[d.f] = ["Public", form.elements.citation?.value.trim() || null];
+    }
+  });
+
+  setStatus("working\u2026");
+  let res, payload;
+  try {
+    res = await fetch("/api/company", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        name: form.elements.name.value,
+        values,
+        field_sources: fieldSources,
+        tags: form.elements.tags.value,
+        allow_duplicate: allowDuplicate,
+      }),
+    });
+    payload = await res.json();
+  } catch (err) {
+    setStatus("no server \\u2014 start it with <code>python scripts/serve.py</code>", true);
+    return;
+  }
+
+  const dupeBox = document.getElementById("dupe-warning");
+
+  if (!res.ok) {
+    if (res.status === 409 && payload.duplicates && payload.duplicates.length) {
+      const names = payload.duplicates
+        .map(d => `<b>${esc(d.name)}</b> (matched on ${esc(d.matched_on)})`).join(", ");
+      dupeBox.hidden = false;
+      dupeBox.innerHTML = `<p class="note">This may already be here: ${names}.</p>
+        <button type="button" class="act" id="dupe-anyway">add anyway</button>`;
+      setStatus("");
+      return;
+    }
+    dupeBox.hidden = true;
+    setStatus(esc(payload.error || `refused (${res.status})`), true);
+    return;
+  }
+
+  dupeBox.hidden = true;
+  const n = payload.written.length;
+  setStatus(
+    `added <b>${esc(payload.name)}</b> \\u00b7 ${n} field${n === 1 ? "" : "s"} recorded`
+    + (payload.gaps.length ? ` \\u00b7 ${payload.gaps.length} left unknown` : "")
+    + (payload.tags.length ? ` \\u00b7 tagged ${payload.tags.map(esc).join(", ")}` : "")
+    + ` \\u00b7 <b>${payload.live_count}</b> companies`
+  );
+  await reload();
+  form.reset();
+  renderIntake();
+  syncIntake();
+}
+
+document.addEventListener("submit", e => {
   const form = e.target.closest("#intake");
   if (!form) return;
   e.preventDefault();
+  submitCompany(form, false);
+});
 
-  const fields = INTAKE.map(d => {
-    const el = form.elements[d.f];
-    const zero = form.elements[d.f + "__zero"];
-    const row = form.querySelector(`[data-row="${d.f}"]`);
-    const chosen = row?.querySelector('.src-opt[aria-pressed="true"]');
-    return {
-      field: d.f,
-      value: el ? el.value : "",
-      is_zero: !!(zero && zero.checked),
-      source: chosen ? chosen.dataset.val : "Manual",
-      citation: form.elements.citation ? form.elements.citation.value : "",
-    };
-  }).filter(x => String(x.value).trim() !== "" || x.is_zero);
-
-  const out = await act("/api/entity", {
-    name: form.elements.name.value,
-    domain: form.elements.domain.value,
-    fields,
-  }, p => {
-    const n = p.written.length;
-    const unknown = p.left_unknown.length;
-    return `added <b>${esc(p.name)}</b> \u00b7 ${n} field${n === 1 ? "" : "s"} recorded`
-         + (unknown ? ` \u00b7 ${unknown} left unknown` : "")
-         + ` \u00b7 <b>${p.live_count}</b> companies`;
-  });
-
-  if (out) {
-    form.reset();
-    renderIntake();
-    syncIntake();
-  }
+document.addEventListener("click", e => {
+  if (e.target.id !== "dupe-anyway") return;
+  submitCompany(document.getElementById("intake"), true);
 });
 
 /* --------------------------------------------------------------------- go */

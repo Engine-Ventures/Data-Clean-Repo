@@ -33,9 +33,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from evpipeline import actions  # noqa: E402
+from evpipeline import actions, write  # noqa: E402
 from evpipeline.db import DEFAULT_DB_PATH  # noqa: E402
 from evpipeline.validate import ValidationError  # noqa: E402
+from evpipeline.write import DuplicateName  # noqa: E402
 
 UI_DIR = REPO_ROOT / "ui"
 PORT = 8765
@@ -127,6 +128,21 @@ class Handler(BaseHTTPRequestHandler):
         conn.execute("PRAGMA foreign_keys = ON")
         try:
             result = self._dispatch(conn, path, body)
+        except DuplicateName as exc:
+            # Not a plain refusal: the caller can resubmit with
+            # allow_duplicate=true and proceed, so the candidates it might be
+            # go alongside the message rather than only being named in text.
+            self._send(409, {
+                "error": str(exc),
+                "duplicates": [
+                    {
+                        "entity_id": d.entity_id, "name": d.name, "domain": d.domain,
+                        "matched_on": d.matched_on, "matched_value": d.matched_value,
+                    }
+                    for d in exc.duplicates
+                ],
+            })
+            return
         except ValidationError as exc:
             # A refused write is expected traffic, not a failure: the layer
             # says no to a merge into a merged entity, a phantom with no
@@ -166,10 +182,39 @@ class Handler(BaseHTTPRequestHandler):
             return actions.mark_phantom(conn, int(body["entity_id"]), body["reason"], USER)
         if path == "/api/unphantom":
             return actions.unmark_phantom(conn, int(body["entity_id"]), USER)
-        if path == "/api/entity":
-            return actions.add_entity(
-                conn, body["name"], body["domain"], USER, body.get("fields")
+        if path == "/api/company":
+            result = write.add_company(
+                conn,
+                body["name"],
+                body.get("values") or {},
+                USER,
+                allow_duplicate=bool(body.get("allow_duplicate")),
+                field_sources={
+                    k: tuple(v) for k, v in (body.get("field_sources") or {}).items()
+                },
+                tags=body.get("tags"),
             )
+            return {
+                "entity_id": result.entity_id,
+                "name": result.name,
+                "domain": result.domain,
+                "written": result.written,
+                "gaps": result.gaps,
+                "tags": result.tags,
+                "alias_claimed": result.alias_claimed,
+                "review_ids": result.review_ids,
+                "duplicates": [
+                    {
+                        "entity_id": d.entity_id, "name": d.name, "domain": d.domain,
+                        "matched_on": d.matched_on, "matched_value": d.matched_value,
+                    }
+                    for d in result.duplicates
+                ],
+                "live_count": actions.live_count(conn),
+            }
+        if path == "/api/tags":
+            tags_out = write.set_tags(conn, int(body["entity_id"]), body.get("tags"), USER)
+            return {"entity_id": int(body["entity_id"]), "tags": tags_out}
         if path == "/api/vocab":
             # The form's dropdowns come from the database, not a copy in the
             # page, so a picklist can never drift from what validate.py accepts.

@@ -26,6 +26,12 @@ DATE_FIELDS = {
 # Set on an entity whose relationship predates the slide extraction window.
 PREDATES_FLAG = "relationship_predates_crm"
 
+# Money fields go through the currency pairing rule (§8: _usd + amount_local +
+# currency). round_size_usd is the only one _coerce is ever asked to handle
+# today, and only in principle -- ADD_FIELDS (write.py) deliberately excludes
+# it from the hand-add form, so no caller anywhere exercises this branch.
+_MONEY_FIELDS = {"round_size_usd"}
+
 
 class ValidationError(ValueError):
     """Raised when a write would violate a §8 rule."""
@@ -173,6 +179,62 @@ def run_all_warnings(conn: sqlite3.Connection) -> list[Warning_]:
 # Validated write
 # ---------------------------------------------------------------------------
 
+def _coerce(field: str, raw: str) -> tuple[str | None, float | None, bool]:
+    """A raw form string to (text, value_num, is_zero) for one field.
+
+    `raw` arrives already stripped and non-empty (`add_company` filters blank
+    values out before calling this), so the only two questions are: is this
+    field text or money, and if money, is the number a genuine zero.
+
+    UNPINNED: every current caller passes a text field (website, hq_country,
+    stage, owner_name -- write.py's ADD_FIELDS). No test in test_add_company.py
+    exercises the money branch, since round_size_usd is deliberately not on
+    the hand-add form. Written to match check_zero_vs_unknown's contract
+    (§8: blank/zero/unavailable are never interchangeable) rather than left
+    unimplemented, but revisit this branch's behaviour if a money field is
+    ever added to ADD_FIELDS -- it has not been exercised against a real spec.
+    """
+    if field in _MONEY_FIELDS:
+        num = float(raw)
+        return (None, num, num == 0.0)
+    return (raw, None, False)
+
+
+def validate_field_write(
+    conn: sqlite3.Connection,
+    entity_id: int,
+    field: str,
+    value: str | None,
+    source: str,
+    citation: str | None = None,
+    value_num: float | None = None,
+    is_zero: bool = False,
+) -> None:
+    """Every §8 check `write_field` runs, split out so it can run before the
+    row it is about to describe exists.
+
+    `add_company` (write.py) validates every supplied field against a
+    placeholder `entity_id=0` before creating the company, so a rejected value
+    never leaves a half-created entity behind. None of these checks read
+    `entity_id` for anything but `check_first_meeting_order`, and a hand-add
+    never supplies `first_meeting`, so 0 is safe there in practice — asserted
+    by test_add_company.py rather than assumed.
+    """
+    check_iso_date(field, value)
+    if value_num is not None or is_zero:
+        check_zero_vs_unknown(value_num, is_zero)
+    if field == "affinity_status":
+        check_enum(conn, "affinity_status", value)
+    elif field == "working_group":
+        check_enum(conn, "working_group", value)
+    elif field == "stage":
+        check_enum(conn, "round_stage", value)
+    if field == "first_meeting":
+        check_first_meeting_order(conn, entity_id, value)
+    if source == "Public" and not citation:
+        raise ValidationError("public enrichment requires a citation")
+
+
 def write_field(
     conn: sqlite3.Connection,
     entity_id: int,
@@ -189,19 +251,10 @@ def write_field(
     Supersedes the previous current value rather than updating in place, so
     field_value stays append-only and the provenance history is complete.
     """
-    check_iso_date(field, value)
-    if value_num is not None or is_zero:
-        check_zero_vs_unknown(value_num, is_zero)
-    if field == "affinity_status":
-        check_enum(conn, "affinity_status", value)
-    elif field == "working_group":
-        check_enum(conn, "working_group", value)
-    elif field == "stage":
-        check_enum(conn, "round_stage", value)
-    if field == "first_meeting":
-        check_first_meeting_order(conn, entity_id, value)
-    if source == "Public" and not citation:
-        raise ValidationError("public enrichment requires a citation")
+    validate_field_write(
+        conn, entity_id, field, value, source,
+        citation=citation, value_num=value_num, is_zero=is_zero,
+    )
 
     conn.execute(
         "UPDATE field_value SET superseded_at = datetime('now') "

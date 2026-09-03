@@ -249,61 +249,6 @@ def test_resolve_review_records_who_and_the_open_count(rw):
     )
 
 
-# ---------------------------------------------------------------------------
-# add_entity
-# ---------------------------------------------------------------------------
-
-
-def test_add_entity_requires_a_domain(rw):
-    with pytest.raises(ValidationError, match="domain"):
-        actions.add_entity(rw, "New Co", "", "test")
-
-
-def test_add_entity_rejects_a_domain_already_in_use(rw):
-    row = rw.execute(
-        "SELECT domain FROM entity WHERE domain IS NOT NULL LIMIT 1"
-    ).fetchone()
-    with pytest.raises(ValidationError, match="already belongs to"):
-        actions.add_entity(rw, "Copycat Inc", row["domain"], "test")
-
-
-def test_add_entity_rejects_public_field_with_no_citation(rw):
-    with pytest.raises(ValidationError, match="citation"):
-        actions.add_entity(
-            rw, "Halide Thermal", "halidethermal.example", "test",
-            fields=[{"field": "hq_country", "value": "Chile", "source": "Public"}],
-        )
-
-
-def test_add_entity_leaves_a_blank_field_unwritten(rw):
-    """The three-state rule this whole layer is built on: blank is unknown,
-    which is different from a stored empty string and different from zero."""
-    out = actions.add_entity(
-        rw, "Halide Thermal", "halidethermal.example", "test",
-        fields=[
-            {"field": "hq_country", "value": "United States", "source": "Affinity"},
-            {"field": "owner_name", "value": "", "source": "Affinity"},
-        ],
-    )
-    assert out["written"] == ["hq_country"]
-    assert out["left_unknown"] == ["owner_name"]
-    stored = rw.execute(
-        "SELECT COUNT(*) FROM field_value WHERE entity_id = ? AND field = 'owner_name'",
-        (out["entity_id"],),
-    ).fetchone()[0]
-    assert stored == 0, "a blank field must not be written as an empty string"
-
-
-def test_add_entity_stores_a_genuine_zero_distinctly(rw):
-    out = actions.add_entity(
-        rw, "Halide Thermal", "halidethermal.example", "test",
-        fields=[
-            {"field": "round_size_usd", "value": "", "is_zero": True, "source": "Affinity"},
-        ],
-    )
-    row = rw.execute(
-        "SELECT value_num, is_zero FROM field_value "
-        "WHERE entity_id = ? AND field = 'round_size_usd'",
-        (out["entity_id"],),
-    ).fetchone()
-    assert (row["value_num"], row["is_zero"]) == (0.0, 1)
+# add_entity was retired in favour of write.add_company (adopted from main),
+# which does everything this coverage checked plus duplicate detection and a
+# restricted source list for hand-adds. See tests/test_add_company.py.
