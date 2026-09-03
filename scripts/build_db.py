@@ -1,10 +1,17 @@
 #!/usr/bin/env python
 """Build the pipeline database from the staging workbook.
 
-    python scripts/build_db.py [--db data/pipeline.db] [--force]
+    export DATABASE_URL='postgresql://localhost/evpipeline'
+    python scripts/build_db.py [--force]
 
-Idempotent by construction: it rebuilds into a fresh file rather than mutating
-an existing one, so a load can always be repeated and diffed.
+Ported from SQLite with db.py. ``--db`` is gone: the target is DATABASE_URL,
+because there is no longer a file to name. That removes the old idempotency
+story too -- "rebuild into a fresh file" has no Postgres equivalent -- so
+``--force`` now means TRUNCATE the data tables and reload, and without it the
+script refuses to run against a database that already holds entities. The
+vocabulary tables are deliberately left alone: they are seeded by seed.sql and
+re-seeded by ingest, and truncating them would break the FKs pointing at them
+mid-load.
 """
 
 from __future__ import annotations
@@ -19,6 +26,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from evpipeline import connect, create_schema
 from evpipeline.ingest import build
 
+# Every table holding loaded data, ordered so the list reads top-down; the
+# actual delete order does not matter because one TRUNCATE ... CASCADE
+# statement covering all of them defers FK checks to the end of the statement.
+DATA_TABLES = [
+    "slide_observation_override",
+    "slide_observation",
+    "meeting_attendee",
+    "meeting",
+    "money_value",
+    "field_value",
+    "gap_status",
+    "entity_outcome",
+    "entity_sourcing",
+    "founder",
+    "funding_round",
+    "entity_group_member",
+    "review_item",
+    "alias",
+    "entity",
+    "ingest_run",
+]
+
 RAW = Path(__file__).resolve().parents[1] / "data" / "raw"
 DRAFT = RAW / "EV_Deal_Pipeline_Clean_Dataset_DRAFT.xlsx"
 V2 = RAW / "EV_Deal_Pipeline_Clean_Dataset_v2_DEDUPED.xlsx"
@@ -27,27 +56,43 @@ AFFINITY = RAW / "affinity_export_2026-09-01.csv"
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default=str(Path("data") / "pipeline.db"))
-    ap.add_argument("--force", action="store_true", help="overwrite an existing database")
+    ap.add_argument(
+        "--force", action="store_true", help="truncate loaded data and reload"
+    )
     args = ap.parse_args()
 
-    db_path = Path(args.db)
-    if db_path.exists():
-        if not args.force:
-            print(f"{db_path} exists; pass --force to rebuild", file=sys.stderr)
-            return 1
-        db_path.unlink()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-
-    missing = [p for p in (DRAFT, V2, AFFINITY) if not p.exists()]
+    missing = [p for p in (DRAFT, AFFINITY) if not p.exists()]
     if missing:
         for p in missing:
             print(f"missing source: {p}", file=sys.stderr)
         return 1
 
-    conn = connect(db_path)
+    # V2_DEDUPED only contributes merge *proposals* to the review queue, so a
+    # load without it is complete but for those 17 items. It is optional rather
+    # than required so the database can be rebuilt from the DRAFT extraction
+    # plus the Affinity export alone, which is what enrichment needs.
+    v2 = V2 if V2.exists() else None
+    if v2 is None:
+        print(f"note: {V2.name} absent; v2 merge proposals not imported", file=sys.stderr)
+
+    conn = connect()
     create_schema(conn)
-    report = build(conn, DRAFT, v2_path=V2, affinity_path=AFFINITY)
+
+    existing = int(conn.execute("SELECT COUNT(*) FROM entity").fetchone()[0])
+    if existing:
+        if not args.force:
+            print(
+                f"database already holds {existing} entities; pass --force to "
+                "truncate and reload",
+                file=sys.stderr,
+            )
+            conn.close()
+            return 1
+        conn.execute(f"TRUNCATE {', '.join(DATA_TABLES)} RESTART IDENTITY CASCADE")
+        conn.commit()
+
+    report = build(conn, DRAFT, v2_path=v2, affinity_path=AFFINITY)
+    conn.commit()
     conn.close()
 
     print(json.dumps(report, indent=2, sort_keys=True))

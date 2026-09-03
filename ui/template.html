@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>New Deal Meeting — pipeline triage</title>
+<title> Engine Ventures Company Data Interface</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Spline+Sans+Mono:wght@300..700&display=swap" rel="stylesheet">
@@ -694,6 +694,269 @@ button {
 
 .scrim.open { opacity: 1; pointer-events: auto; }
 
+/* ==========================================================================
+   Add company. Present only when the page is served (scripts/serve.py);
+   the built file:// snapshot has no write surface and hides the button.
+   ========================================================================== */
+
+.add-btn {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border: 1px solid var(--ink);
+  background: var(--plate);
+  color: var(--ink);
+  align-self: center;
+}
+
+.add-btn:hover { background: var(--ink); color: var(--plate); }
+
+.addbox {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: var(--plate);
+  border: 2px solid var(--ink);
+  z-index: 41;
+  padding: 20px 22px 22px;
+}
+
+.addbox[hidden] { display: none; }
+
+.addbox h2 { font-size: 20px; }
+
+.addbox label {
+  display: block;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  margin: 14px 0 5px;
+}
+
+.addbox input, .addbox select {
+  font: inherit;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 12px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.addbox .hint {
+  font-size: 10.5px;
+  color: var(--graphite);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.addbox .actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 14px;
+}
+
+.addbox .actions button {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  padding: 7px 14px;
+  border: 1px solid var(--ink);
+}
+
+.addbox .actions .primary { background: var(--ink); color: var(--plate); }
+.addbox .actions button[disabled] { opacity: 0.45; cursor: default; }
+
+/* Filament is spent on destructive actions; a duplicate warning is not one,
+   so it reads as a raised note rather than an alarm. */
+.addnote {
+  border: 1px solid var(--ink);
+  background: var(--plate-sunk);
+  padding: 10px 12px;
+  margin-top: 16px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.addnote.bad { border-color: var(--s7); color: var(--s7); }
+.addnote ul { margin: 7px 0 0; padding-left: 17px; }
+.addnote li { margin-top: 3px; }
+
+.addnote .mono { font-size: 10.5px; }
+
+/* ==========================================================================
+   Suggested values, tags and tag suggestion.
+
+   A suggested value is drawn in the Public-source colour rather than as a
+   normal typed one, because that is exactly what it will be written as if it
+   is left alone: source Public, citation the lookup's entity URL. The moment
+   someone edits the field the marking is dropped and it becomes a Manual
+   write under their name. The colour is therefore not decoration -- it is the
+   provenance the save is about to record, shown before the save.
+   ========================================================================== */
+
+.lookup-row { display: flex; gap: 8px; align-items: stretch; }
+.lookup-row input { flex: 1 1 auto; min-width: 0; }
+
+.lookup-row button {
+  flex: none;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 11px;
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.lookup-row button:hover:not([disabled]) { border-color: var(--ink); }
+.lookup-row button[disabled] { opacity: 0.45; cursor: default; }
+
+.lookupmsg {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--graphite);
+  margin-top: 6px;
+}
+
+.lookupmsg b { color: var(--ink); }
+
+.addbox label .prov {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--src-public);
+  margin-left: 7px;
+}
+
+.addbox input.suggested {
+  border-color: var(--src-public);
+  box-shadow: inset 2px 0 0 var(--src-public);
+}
+
+/* Tags on a company name. Deliberately quieter than every stage colour on the
+   page: a tag is the team's own label, not a position in the funnel, and it
+   must not read as one. */
+.tags { display: inline-flex; flex-wrap: wrap; gap: 3px; vertical-align: middle; }
+
+.tag {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  padding: 1px 5px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  color: var(--graphite);
+  white-space: nowrap;
+}
+
+.co .tags { margin-left: 6px; }
+
+.tagfilter {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+.tagfilter label {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--graphite);
+}
+
+.tagfilter select {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  padding: 5px 8px;
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  color: var(--ink);
+  max-width: 260px;
+}
+
+.tagfilter .scope { font-size: 10.5px; color: var(--graphite); line-height: 1.5; }
+.tagfilter .scope b { color: var(--ink); }
+
+/* The per-segment tag completer. A datalist cannot do this job: it matches
+   the whole field value, and this field holds a comma-separated list, so it
+   would stop suggesting anything after the first tag. */
+.tagwrap { position: relative; }
+
+.tagsuggest {
+  position: absolute;
+  left: 0; right: 0; top: 100%;
+  z-index: 5;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 168px;
+  overflow-y: auto;
+  background: var(--plate);
+  border: 1px solid var(--ink);
+}
+
+.tagsuggest[hidden] { display: none; }
+
+.tagsuggest li {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.tagsuggest li[aria-selected="true"] { background: var(--plate-sunk); }
+.tagsuggest li .n { color: var(--graphite); float: right; font-size: 9.5px; }
+
+/* The drawer's tag editor -- the one field on the page that can be changed
+   after a company exists. See write.set_tags for why this one and not the
+   enrichment fields. */
+.tagedit { display: flex; gap: 8px; align-items: stretch; margin-top: 2px; }
+
+.tagedit input {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.tagedit button {
+  flex: none;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 12px;
+  border: 1px solid var(--ink);
+  background: var(--plate);
+  color: var(--ink);
+}
+
+.tagedit button[disabled] { opacity: 0.45; cursor: default; }
+
+.tagmsg { font-size: 10.5px; color: var(--graphite); margin-top: 6px; line-height: 1.5; }
+.tagmsg.bad { color: var(--s7); }
+
 .drawer-head {
   display: flex;
   justify-content: space-between;
@@ -992,7 +1255,19 @@ button {
 .tbl-scroll { overflow-x: auto; }
 
 .wl.co { min-width: 720px; }
-.wl.drive { min-width: 940px; }
+.wl.drive { min-width: 1040px; }
+
+/* The vitals grid is a masthead component; inside a panel it needs its own
+   bottom edge and to stop pretending the header is above it. */
+/* An index row with no company behind it: same weight as a name button, but
+   plainly not a control. */
+.idx-name { font-weight: 500; }
+
+.vitals.inpanel {
+  margin-top: 0;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--hairline);
+}
 
 .wl th.sortable { cursor: pointer; user-select: none; }
 .wl th.sortable:hover { color: var(--ink); }
@@ -1297,13 +1572,14 @@ button {
   <header class="masthead">
     <div class="masthead-top">
       <h1>
-        New&nbsp;Deal Meeting
+        Engine&nbsp;Ventures Data Interface
         <span class="thin">Pipeline triage — reconstructed from 43 weekly slides</span>
       </h1>
       <div class="built">
         <span class="mono" id="built"></span><br>
         <span class="mono">source: slide extraction + Affinity enrichment</span>
       </div>
+      <button class="add-btn" id="add-open" hidden>+ Add company</button>
     </div>
     <div class="vitals" id="vitals"></div>
 
@@ -1311,7 +1587,7 @@ button {
       <button class="tab" role="tab" data-tab="pipeline" id="tab-pipeline"
               aria-controls="panel-pipeline">Companies <span class="n" id="tabn-pipeline"></span></button>
       <button class="tab" role="tab" data-tab="drive" id="tab-drive"
-              aria-controls="panel-drive">Drive index <span class="n" id="tabn-drive"></span></button>
+              aria-controls="panel-drive">Index reach <span class="n" id="tabn-drive"></span></button>
       <button class="tab" role="tab" data-tab="trends" id="tab-trends"
               aria-controls="panel-trends">Trends</button>
       <button class="tab" role="tab" data-tab="review" id="tab-review"
@@ -1358,33 +1634,42 @@ button {
     <p class="tbl-foot" id="co-foot"></p>
   </section>
 
-  <!-- ============================================================= drive index -->
+  <!-- ============================================================= index reach -->
   <section class="panel section" id="panel-drive" role="tabpanel"
            aria-labelledby="tab-drive" tabindex="-1">
     <div class="section-head">
       <div>
-        <span class="eyebrow">Storage overlap</span>
-        <h2>In the New Deals companies index?</h2>
+        <span class="eyebrow">Record coverage</span>
+        <h2>Which New Deals folders show up in the record?</h2>
         <p>
-          Every company in this cohort — which is the slide extraction plus
-          Affinity enrichment — against the index of company folders under
-          <span class="mono">New Deals / 02. Companies</span>. <b>Y</b> means EV
-          already holds a folder for it; <b>N</b> means the deal reached
-          diligence with nothing in storage under that name, which is the half
-          worth reading. The join is on name and each Y carries the folder it
-          matched and how, because slide spellings are not folder names.
+          One row per company folder under
+          <span class="mono">New Deals / 02. Companies</span> &mdash; the
+          closest thing EV has to a list of every company it has opened a file
+          on. Each is looked for in the two records this repo is built from:
+          the whole <b>deal meeting deck</b>, all 153 meetings of it, and the
+          <b>Affinity</b> export. <b>N</b> in both columns is the half worth
+          reading &mdash; material in storage for a company that never reached
+          a slide and has no CRM record. Both joins are on name, because the
+          index carries no domain and no entity id, so every Y carries the name
+          it matched and how.
         </p>
       </div>
       <input class="search" id="drive-search" type="search"
              placeholder="filter by name" aria-label="Filter by company name">
     </div>
 
+    <div class="vitals inpanel" id="reach-vitals"></div>
+
     <div class="controls">
       <span class="control-label">Show</span>
-      <span class="seg" id="drive-filter" role="group" aria-label="Filter by index membership">
+      <span class="seg" id="drive-filter" role="group"
+            aria-label="Filter by where the company is visible">
         <button class="view-btn" data-drive="all">all</button>
-        <button class="view-btn" data-drive="y">in the index</button>
-        <button class="view-btn" data-drive="n">not in it</button>
+        <button class="view-btn" data-drive="either">in either</button>
+        <button class="view-btn" data-drive="slides">on slides</button>
+        <button class="view-btn" data-drive="crm">in Affinity</button>
+        <button class="view-btn" data-drive="both">in both</button>
+        <button class="view-btn" data-drive="neither">in neither</button>
       </span>
     </div>
 
@@ -1406,6 +1691,11 @@ button {
           week, when new companies entered, and how much of the record is
           actually filled in. Every count carries its denominator.
         </p>
+        <div class="tagfilter">
+          <label for="trend-tag">Filter by tag</label>
+          <select id="trend-tag"><option value="">All companies</option></select>
+          <span class="scope" id="trend-scope"></span>
+        </div>
       </div>
     </div>
 
@@ -1443,6 +1733,30 @@ button {
         </p>
         <div class="hbars" id="cov-bars"></div>
         <details class="tableview" id="cov-table"><summary>table view</summary></details>
+      </div>
+
+      <div class="card">
+        <h3>Where they are</h3>
+        <p class="sub">
+          HQ country of the companies that reached Deep Diligence or beyond.
+          Country is an enrichment field, so the bars cover only the companies
+          that have one on record.
+        </p>
+        <div class="ymax" id="hq-cov"></div>
+        <div class="hbars" id="hq-bars"></div>
+        <details class="tableview" id="hq-table"><summary>table view</summary></details>
+      </div>
+
+      <div class="card">
+        <h3>Round stage</h3>
+        <p class="sub">
+          The round on record for every company ever discussed &mdash; bold on
+          at least one slide. Stage comes from enrichment rather than the
+          slide, so it too carries its own coverage.
+        </p>
+        <div class="ymax" id="round-cov"></div>
+        <div class="hbars" id="round-bars"></div>
+        <details class="tableview" id="round-table"><summary>table view</summary></details>
       </div>
 
       <div class="card">
@@ -1560,11 +1874,14 @@ button {
   </section>
 
   <p class="foot">
-    Read-only. This page is generated from <code>data/pipeline.db</code> by
-    <code>scripts/build_ui.py</code> and holds a snapshot — editing, merging and
-    gap resolution go through the validated write path in
-    <code>src/evpipeline/validate.py</code>, which needs a server to be
-    reachable from a browser. Coverage is shown next to every count because a
+    Generated from <code>data/pipeline.db</code> by
+    <code>scripts/build_ui.py</code>. Opened as a file this is a read-only
+    snapshot; served by <code>scripts/serve.py</code> it also offers
+    <b>Add company</b> &mdash; with an optional public lookup that suggests a
+    website and country for you to accept or correct &mdash; and tag editing on
+    any company. Both write through the validated path in
+    <code>src/evpipeline/validate.py</code>. Editing enrichment values, merging
+    and gap resolution stay command-line only. Coverage is shown next to every count because a
     bare count off this dataset is not yet quotable.
   </p>
 
@@ -1572,6 +1889,68 @@ button {
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true" tabindex="-1" aria-label="Company detail"></aside>
+
+<!-- Unhidden only when the page is served, not opened as a file. -->
+<form class="addbox" id="addbox" hidden aria-labelledby="add-title" tabindex="-1">
+  <div class="drawer-head">
+    <h2 id="add-title">Add a company</h2>
+    <button class="close" type="button" id="add-close" aria-label="Close">&times;</button>
+  </div>
+
+  <label for="add-name">Company name</label>
+  <div class="lookup-row">
+    <input id="add-name" name="name" required autocomplete="off">
+    <button type="button" id="add-lookup" hidden>Look up</button>
+  </div>
+  <div class="lookupmsg" id="add-lookup-msg" aria-live="polite"></div>
+
+  <label for="add-website">Website <span class="prov" id="prov-website"></span></label>
+  <input id="add-website" name="website" required autocomplete="off" placeholder="acme.com">
+  <p class="hint">
+    Required: the domain is the match key, and a name-only record recreates the
+    fragmentation this layer exists to fix.
+  </p>
+
+  <label for="add-country">Country <span class="prov" id="prov-hq_country"></span></label>
+  <input id="add-country" name="hq_country" autocomplete="off">
+
+  <label for="add-stage">Round stage</label>
+  <select id="add-stage" name="stage">
+    <option value="">— not known —</option>
+  </select>
+
+  <label for="add-owner">Owner</label>
+  <input id="add-owner" name="owner_name" autocomplete="off">
+
+  <label for="add-tags">Tags</label>
+  <div class="tagwrap">
+    <input id="add-tags" name="tags" autocomplete="off" spellcheck="false"
+           placeholder="climate, hardware, europe"
+           aria-describedby="add-tags-hint" aria-autocomplete="list">
+    <ul class="tagsuggest" id="add-tags-suggest" role="listbox" hidden></ul>
+  </div>
+  <p class="hint" id="add-tags-hint">
+    Comma-separated, your own words. Tags already in use are suggested as you
+    type. They are a label, not a fact about the company, so they are never a
+    worklist gap and an untagged company is not missing anything.
+  </p>
+
+  <p class="hint">
+    Anything left blank is recorded as an unchecked gap, not as a blank value,
+    and shows up on the enrichment worklist. Fields you type are written with
+    source <span class="mono">Manual</span> against your name; a looked-up
+    value you leave <span style="color:var(--src-public)">as suggested</span>
+    is written as <span class="mono">Public</span> with its citation, because
+    it did not come from you.
+  </p>
+
+  <div id="add-msg" aria-live="polite"></div>
+
+  <div class="actions">
+    <button type="button" id="add-cancel">Cancel</button>
+    <button type="submit" class="primary" id="add-save">Save</button>
+  </div>
+</form>
 
 <script id="payload" type="application/json">"__PIPELINE_DATA__"</script>
 <script>
@@ -1600,6 +1979,114 @@ const heldCount = DATA.totals.meetingsHeld;
 const STAGE_IDS = DATA.stages.map(s => s.id);
 
 function pct(n, d) { return d ? Math.round((n / d) * 100) + "%" : "--"; }
+
+/* ==========================================================================
+   Tags.
+
+   Stored as one comma-separated `tags` field per company (see
+   src/evpipeline/tags.py for why that and not a table); build_ui.py splits it
+   so nothing here has to know that.
+
+   The vocabulary is derived from the tags actually in use rather than served
+   as a picklist -- the same rule as tags.vocabulary in Python, restated here
+   because the page must be able to do it over a filtered set. The consequence
+   worth having: a suggestion can never offer a tag that would match nothing,
+   and the last company to drop a tag retires it.
+   ========================================================================== */
+
+function tagList(c) { return c.tags || []; }
+
+function tagVocabulary(cohort) {
+  const seen = new Map();   // casefolded -> first spelling seen, and a count
+  (cohort || DATA.companies).forEach(c => tagList(c).forEach(t => {
+    const k = t.toLowerCase();
+    if (seen.has(k)) seen.get(k).n += 1;
+    else seen.set(k, { key: k, label: t, n: 1 });
+  }));
+  return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function hasTag(c, key) {
+  return tagList(c).some(t => t.toLowerCase() === key);
+}
+
+function tagChips(c) {
+  const t = tagList(c);
+  return t.length
+    ? `<span class="tags">${t.map(x => `<span class="tag">${esc(x)}</span>`).join("")}</span>`
+    : "";
+}
+
+/* The per-segment completer for a comma-separated tag field.
+
+   A native <datalist> is the obvious thing and the wrong one: it matches
+   against the whole field value, so once the field reads "climate, " it stops
+   offering anything. This completes the fragment after the last comma, which
+   is the thing the person is actually typing, and it excludes tags already in
+   the field so it never suggests a duplicate.
+
+   Purely an input aid. Nothing it offers is privileged -- a tag typed in full
+   and a tag picked from the list are the same string by the time it is saved,
+   and a brand-new tag is always allowed. */
+function attachTagSuggest(input, list) {
+  let active = -1, items = [];
+
+  const parts = () => input.value.split(",");
+  const fragment = () => parts()[parts().length - 1].trim().toLowerCase();
+  const already = () => new Set(parts().slice(0, -1).map(x => x.trim().toLowerCase()).filter(Boolean));
+
+  function close() { list.hidden = true; active = -1; items = []; }
+
+  function refresh() {
+    const frag = fragment(), used = already();
+    items = tagVocabulary()
+      .filter(t => !used.has(t.key) && (!frag || t.key.startsWith(frag)))
+      .slice(0, 8);
+    if (!items.length) { close(); return; }
+    active = -1;
+    list.innerHTML = items.map((t, i) => `
+      <li role="option" id="tagopt-${i}" aria-selected="false" data-i="${i}">
+        ${esc(t.label)}<span class="n">${t.n}</span></li>`).join("");
+    list.hidden = false;
+  }
+
+  function mark() {
+    [...list.children].forEach((li, i) =>
+      li.setAttribute("aria-selected", String(i === active)));
+    if (active >= 0) list.children[active].scrollIntoView({ block: "nearest" });
+  }
+
+  function choose(i) {
+    if (!items[i]) return;
+    const ps = parts();
+    ps[ps.length - 1] = " " + items[i].label;
+    // Trailing ", " so the next tag can be typed straight away.
+    input.value = ps.join(",").replace(/^ /, "") + ", ";
+    close();
+    input.focus();
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  input.addEventListener("input", refresh);
+  input.addEventListener("focus", refresh);
+  input.addEventListener("blur", () => setTimeout(close, 120));
+
+  input.addEventListener("keydown", e => {
+    if (list.hidden) return;
+    if (e.key === "ArrowDown") { active = (active + 1) % items.length; mark(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { active = (active - 1 + items.length) % items.length; mark(); e.preventDefault(); }
+    else if (e.key === "Enter" || e.key === "Tab") {
+      // Enter with nothing highlighted must not swallow the form submit.
+      if (active < 0) { close(); return; }
+      choose(active); e.preventDefault();
+    } else if (e.key === "Escape") { close(); e.stopPropagation(); }
+  });
+
+  list.addEventListener("mousedown", e => {
+    const li = e.target.closest("li");
+    if (li) { e.preventDefault(); choose(Number(li.dataset.i)); }
+  });
+}
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"]/g,
     ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
@@ -1662,8 +2149,8 @@ function renderVitals() {
   document.getElementById("built").textContent = "built " + DATA.builtAt;
   document.getElementById("tabn-pipeline").textContent = t.entities;
   document.getElementById("tabn-review").textContent = t.reviewOpen;
-  document.getElementById("tabn-drive").textContent = DATA.driveIndex
-    ? DATA.driveIndex.matched : "";
+  document.getElementById("tabn-drive").textContent = DATA.indexReach
+    ? DATA.indexReach.folders : "";
   document.getElementById("tabn-worklist").textContent =
     DATA.companies.filter(c => c.priority && c.priority.startsWith("P1")).length;
 }
@@ -1685,7 +2172,7 @@ function showPanel(name, push) {
     t.setAttribute("aria-selected", String(p === activePanel));
     t.tabIndex = p === activePanel ? 0 : -1;
   });
-  if (activePanel === "trends") renderTrace();   // needs layout to size
+  if (activePanel === "trends") renderTrends();  // the trace needs layout to size
   if (push !== false) writeHash();
 }
 
@@ -1753,7 +2240,8 @@ function catMembers(cat, basis) {
     : DATA.companies.filter(c => test(c, cat));
   const q = coFilter.trim().toLowerCase();
   return q ? rows.filter(c => c.name.toLowerCase().includes(q)
-                           || (c.domain || "").toLowerCase().includes(q))
+                           || (c.domain || "").toLowerCase().includes(q)
+                           || tagList(c).some(t => t.toLowerCase().includes(q)))
            : rows;
 }
 
@@ -1825,7 +2313,8 @@ function renderCompanies() {
   const body = shown.map(c => `
     <tr>
       <td><button class="name-btn" data-open="${c.id}">${esc(c.name)}</button>${
-        c.phantom ? '<span class="phantom-tag" title="PDF line-wrap artifact; kept for audit">phantom</span>' : ""}
+        c.phantom ? '<span class="phantom-tag" title="PDF line-wrap artifact; kept for audit">phantom</span>' : ""}${
+        tagChips(c)}
         ${c.domain ? `<div class="queue-detail mono">${esc(c.domain)}</div>` : ""}</td>
       <td>${stageCell(c._latest)}</td>
       <td>${stageCell(c.furthest)}</td>
@@ -1851,6 +2340,137 @@ function renderCompanies() {
     + `${BASES[activeBasis].label}${rows.length > shown.length
         ? ` · showing the first ${shown.length}, sort or filter to narrow`
         : ""} · click a name for its evidence log`;
+}
+
+/* ==========================================================================
+   The trends filter.
+
+   One dropdown of the tags in use. Picking one re-derives every rollup on the
+   Trends panel over just those companies, rather than dimming rows in a chart
+   built from the whole cohort -- a funnel showing 185 denominators while the
+   bars describe 12 companies would be a lie in exactly the way this pipeline
+   is built to avoid.
+
+   The re-derivation follows screen_diligence.py's, property for property,
+   because that script already answers "what are these rollups over an
+   arbitrary subset of companies" for the build. Two definitions of `reached`
+   would eventually disagree, so when nothing is filtered the panel uses the
+   server's own numbers verbatim and only checks the client's against them
+   (see checkTrendParity) instead of quietly replacing them.
+
+   What the filter does NOT scope: the masthead vitals, the pipeline table,
+   the review queue and the worklist. Those describe the whole book, and a tag
+   is not a screen of it.
+   ========================================================================== */
+
+let trendTag = "";   // casefolded tag, or "" for every company
+
+const TREND = {
+  companies: DATA.companies,
+  funnel: DATA.funnel,
+  coverage: DATA.coverage,
+  total: DATA.totals.entities,
+};
+
+// Coverage and funnel over an explicit list of companies. Mirrors
+// screen_diligence.screen's rollup block.
+function rollups(kept) {
+  const reached = s => kept.filter(c => (c.furthest || 0) >= s).length;
+  const observed = s => kept.filter(c => c.obs.some(o => o[1] === s)).length;
+  const has = (c, f) => c.fields.some(x => x[0] === f && x[1] != null && x[1] !== "");
+
+  const coverage = {};
+  Object.keys(FIELD_LABEL).forEach(f => {
+    coverage[f] = [kept.filter(c => has(c, f)).length, kept.length];
+  });
+  const deep = kept.filter(c => (c.furthest || 0) >= 5);
+  const disc = kept.filter(c => c.discussed);
+  coverage["hq_country @ deep-diligence cohort"] =
+    [deep.filter(c => has(c, "hq_country")).length, deep.length];
+  coverage["stage @ discussed cohort"] =
+    [disc.filter(c => has(c, "stage")).length, disc.length];
+
+  return {
+    funnel: {
+      obs_prelim: observed(4), obs_deep: observed(5),
+      obs_negotiate: observed(6), obs_legal: observed(7),
+      reached_prelim: reached(4), reached_deep: reached(5),
+      reached_negotiate: reached(6), reached_legal: reached(7),
+    },
+    coverage,
+  };
+}
+
+/* When nothing is filtered the two should agree exactly. If they ever stop
+   agreeing, the client's copy of the rule has drifted from the pipeline's --
+   which is worth knowing about loudly rather than shipping a filtered chart
+   that quietly means something else. The displayed numbers stay the server's
+   either way. */
+function checkTrendParity() {
+  const mine = rollups(DATA.companies);
+  const off = Object.keys(DATA.funnel)
+    .filter(k => mine.funnel[k] !== DATA.funnel[k]);
+  if (off.length) {
+    console.warn("trend rollups disagree with the build on:", off,
+                 { page: mine.funnel, build: DATA.funnel });
+  }
+}
+
+function applyTrendFilter() {
+  // A tag can stop existing while it is selected -- someone edits it off the
+  // last company that had it. Falling back to every company beats filtering
+  // to an empty cohort on a tag that is gone.
+  if (trendTag && !tagVocabulary().some(t => t.key === trendTag)) trendTag = "";
+  const kept = trendTag
+    ? DATA.companies.filter(c => hasTag(c, trendTag))
+    : DATA.companies;
+  TREND.companies = kept;
+  TREND.total = kept.length;
+  if (trendTag) {
+    const r = rollups(kept);
+    TREND.funnel = r.funnel;
+    TREND.coverage = r.coverage;
+  } else {
+    TREND.funnel = DATA.funnel;
+    TREND.coverage = DATA.coverage;
+  }
+}
+
+function renderTrendFilter() {
+  const vocab = tagVocabulary();
+  const sel = document.getElementById("trend-tag");
+  sel.innerHTML = `<option value="">All companies</option>`
+    + vocab.map(t =>
+        `<option value="${esc(t.key)}">${esc(t.label)} (${t.n})</option>`).join("");
+  sel.value = trendTag;
+  sel.disabled = vocab.length === 0;
+
+  const scope = document.getElementById("trend-scope");
+  if (!vocab.length) {
+    scope.innerHTML = "No tags in use yet — add one on a company and it appears here.";
+  } else if (!trendTag) {
+    scope.innerHTML = `Every chart below covers all <b>${DATA.totals.entities}</b> companies.`;
+  } else {
+    const label = (vocab.find(t => t.key === trendTag) || {}).label || trendTag;
+    scope.innerHTML = `<b>${TREND.total}</b> of ${DATA.totals.entities} companies tagged `
+      + `<b>${esc(label)}</b> — every chart below, the trace included, is re-derived `
+      + `over just those. Coverage denominators move with it.`;
+  }
+}
+
+function renderTrends() {
+  applyTrendFilter();
+  renderTrendFilter();
+  renderFunnel();
+  renderAttention();
+  renderCoverage();
+  renderHq();
+  renderRound();
+  renderDwell();
+  renderMix();
+  renderNew();
+  renderViews();
+  renderTrace();
 }
 
 /* ==========================================================================
@@ -1880,8 +2500,8 @@ function tableView(el, headers, rows) {
 }
 
 function renderFunnel() {
-  const f = DATA.funnel;
-  const total = DATA.totals.entities;
+  const f = TREND.funnel;
+  const total = TREND.total;
   const steps = [
     { label: "Prelim Diligence",      n: f.reached_prelim,    v: 4, prev: null },
     { label: "Deep Diligence",        n: f.reached_deep,      v: 5, prev: f.reached_prelim },
@@ -1896,7 +2516,7 @@ function renderFunnel() {
 }
 
 function renderAttention() {
-  const top = DATA.companies.filter(c => c.times > 0)
+  const top = TREND.companies.filter(c => c.times > 0)
     .sort((a, b) => b.times - a.times || a.name.localeCompare(b.name));
   const max = top.length ? top[0].times : 1;
   document.getElementById("attention-bars").innerHTML =
@@ -1910,13 +2530,15 @@ function renderAttention() {
 // Stage mix: companies per stage per meeting, from the collapsed per-week stage.
 function mixData() {
   const per = weeks.map(() => ({}));
-  DATA.companies.forEach(c => {
+  TREND.companies.forEach(c => {
     c._perWeek.forEach((o, wi) => {
       per[wi][o.stage] = (per[wi][o.stage] || 0) + 1;
     });
   });
   return per;
 }
+
+let mixState = null;   // hover data for #mix-cols, replaced on every render
 
 function renderMix() {
   const per = mixData();
@@ -1944,27 +2566,33 @@ function renderMix() {
     `<span class="swatch"><i data-v="${s}"></i>${STAGE_SHORT[s]}</span>`).join("")
     + '<span class="swatch"><i class="void"></i>no slide</span>';
 
-  const mixBase = `<b>${heldCount}</b> meetings held · peak <b>${max}</b> companies in one week`;
-  document.getElementById("mix-readout").innerHTML = mixBase;
+  mixState = {
+    per, totals,
+    base: `<b>${heldCount}</b> meetings held · peak <b>${max}</b> companies in one week`,
+  };
+  document.getElementById("mix-readout").innerHTML = mixState.base;
 
   const cols = document.getElementById("mix-cols");
-  cols.addEventListener("pointerover", e => {
-    const col = e.target.closest(".col");
-    if (!col) return;
-    const i = Number(col.dataset.w), m = weeks[i];
-    if (m.status !== "held") {
+  if (!cols.dataset.wired) {
+    cols.dataset.wired = "1";
+    cols.addEventListener("pointerover", e => {
+      const col = e.target.closest(".col");
+      if (!col) return;
+      const i = Number(col.dataset.w), m = weeks[i];
+      if (m.status !== "held") {
+        document.getElementById("mix-readout").innerHTML =
+          `<b>${m.date}</b> · no slide extracted${m.note ? " · " + esc(m.note) : ""}`;
+        return;
+      }
+      const parts = STAGE_IDS.filter(s => mixState.per[i][s])
+        .map(s => `${STAGE_SHORT[s]} ${mixState.per[i][s]}`).reverse();
       document.getElementById("mix-readout").innerHTML =
-        `<b>${m.date}</b> · no slide extracted${m.note ? " · " + esc(m.note) : ""}`;
-      return;
-    }
-    const parts = STAGE_IDS.filter(s => per[i][s])
-      .map(s => `${STAGE_SHORT[s]} ${per[i][s]}`).reverse();
-    document.getElementById("mix-readout").innerHTML =
-      `<b>${m.date}</b> · ${totals[i]} listed · ${parts.join(" · ")}`;
-  });
-  cols.addEventListener("pointerleave", () => {
-    document.getElementById("mix-readout").innerHTML = mixBase;
-  });
+        `<b>${m.date}</b> · ${mixState.totals[i]} listed · ${parts.join(" · ")}`;
+    });
+    cols.addEventListener("pointerleave", () => {
+      document.getElementById("mix-readout").innerHTML = mixState.base;
+    });
+  }
 
   tableView("mix-table",
     ["Meeting"].concat(STAGE_IDS.map(s => STAGE_SHORT[s])).concat(["Total"]),
@@ -2000,16 +2628,18 @@ function axisTicks() {
   }).join("");
 }
 
+let newState = null;   // hover data for #new-cols, replaced on every render
+
 function renderNew() {
   const firstAt = weeks.map(() => 0);
   const idxOf = new Map(weeks.map((m, i) => [m.date, i]));
-  DATA.companies.forEach(c => {
+  TREND.companies.forEach(c => {
     if (c.first != null && idxOf.has(c.first)) firstAt[idxOf.get(c.first)] += 1;
   });
   const max = Math.max(1, ...firstAt);
 
   document.getElementById("new-ymax").textContent =
-    "new companies — peak " + max + " in one week, " + DATA.totals.entities + " in total";
+    "new companies — peak " + max + " in one week, " + TREND.total + " in total";
   document.getElementById("new-cols").style.setProperty("--n", weeks.length);
   document.getElementById("new-axis").style.setProperty("--n", weeks.length);
 
@@ -2020,22 +2650,28 @@ function renderNew() {
   }).join("");
   document.getElementById("new-axis").innerHTML = axisTicks();
 
-  const base = `<b>${DATA.totals.entities}</b> first sightings over ${heldCount} meetings · `
-    + `median <b>${median(firstAt.filter((n, i) => weeks[i].status === "held"))}</b> a week`;
-  document.getElementById("new-readout").innerHTML = base;
+  newState = {
+    firstAt,
+    base: `<b>${TREND.total}</b> first sightings over ${heldCount} meetings · `
+      + `median <b>${median(firstAt.filter((n, i) => weeks[i].status === "held"))}</b> a week`,
+  };
+  document.getElementById("new-readout").innerHTML = newState.base;
 
   const cols = document.getElementById("new-cols");
-  cols.addEventListener("pointerover", e => {
-    const col = e.target.closest(".col");
-    if (!col) return;
-    const i = Number(col.dataset.w), m = weeks[i];
-    document.getElementById("new-readout").innerHTML = m.status !== "held"
-      ? `<b>${m.date}</b> · no slide extracted`
-      : `<b>${m.date}</b> · ${firstAt[i]} new compan${firstAt[i] === 1 ? "y" : "ies"}`;
-  });
-  cols.addEventListener("pointerleave", () => {
-    document.getElementById("new-readout").innerHTML = base;
-  });
+  if (!cols.dataset.wired) {
+    cols.dataset.wired = "1";
+    cols.addEventListener("pointerover", e => {
+      const col = e.target.closest(".col");
+      if (!col) return;
+      const i = Number(col.dataset.w), m = weeks[i], n = newState.firstAt[i];
+      document.getElementById("new-readout").innerHTML = m.status !== "held"
+        ? `<b>${m.date}</b> · no slide extracted`
+        : `<b>${m.date}</b> · ${n} new compan${n === 1 ? "y" : "ies"}`;
+    });
+    cols.addEventListener("pointerleave", () => {
+      document.getElementById("new-readout").innerHTML = newState.base;
+    });
+  }
 
   tableView("new-table", ["Meeting", "New companies"],
     weeks.map((m, i) => [m.date + (m.status !== "held" ? " (no slide)" : ""),
@@ -2049,7 +2685,7 @@ function median(xs) {
 }
 
 function renderCoverage() {
-  const cov = DATA.coverage;
+  const cov = TREND.coverage;
   const keys = Object.keys(cov);
   document.getElementById("cov-bars").innerHTML = keys.map(k => {
     const [n, d] = cov[k];
@@ -2059,6 +2695,50 @@ function renderCoverage() {
     keys.map(k => [FIELD_LABEL[k] || k, cov[k][0], cov[k][1], pct(cov[k][0], cov[k][1])]));
 }
 
+function fieldOf(c, key) {
+  const row = c.fields.find(f => f[0] === key);
+  return row && row[1] != null && row[1] !== "" ? String(row[1]) : null;
+}
+
+// One field, one cohort, counted into bars. Companies without a value on
+// record are not a category -- they are the gap between known and cohort, which
+// is what the coverage line above the bars carries.
+function breakdown(cohort, key, order) {
+  const counts = new Map();
+  cohort.forEach(c => {
+    const v = fieldOf(c, key);
+    if (v) counts.set(v, (counts.get(v) || 0) + 1);
+  });
+  const rank = v => { const i = order ? order.indexOf(v) : -1; return i < 0 ? order ? order.length : 0 : i; };
+  const rows = [...counts].map(([label, n]) => ({ label, n }))
+    .sort((a, b) => rank(a.label) - rank(b.label)
+                 || b.n - a.n || a.label.localeCompare(b.label));
+  return { rows, known: rows.reduce((t, r) => t + r.n, 0), total: cohort.length };
+}
+
+function renderBreakdown(ids, cohort, key, noun, order) {
+  const { rows, known, total } = breakdown(cohort, key, order);
+  document.getElementById(ids + "-cov").textContent =
+    `${known}/${total} ${noun} with a value on record`;
+  document.getElementById(ids + "-bars").innerHTML =
+    rows.map(r => hbar(r.label, r.n, { denom: known, note: pct(r.n, known) })).join("")
+    || '<p class="empty">Nothing on record.</p>';
+  tableView(ids + "-table", ["Value", "Companies", "Of known", "Of cohort"],
+    rows.map(r => [esc(r.label), r.n, pct(r.n, known), pct(r.n, total)])
+      .concat([["unknown", total - known, "&mdash;", pct(total - known, total)]]));
+}
+
+function renderHq() {
+  renderBreakdown("hq", TREND.companies.filter(c => c.reachedDeep),
+                  "hq_country", "Deep Diligence+ companies");
+}
+
+function renderRound() {
+  renderBreakdown("round", TREND.companies.filter(c => c.discussed),
+                  "stage", "discussed companies",
+                  ["Preseed", "Seed", "Series A", "Series B", "Series C"]);
+}
+
 // Longest unbroken run of meetings-held a company spent listed at one stage.
 function renderDwell() {
   const heldOrdinal = new Map();
@@ -2066,7 +2746,7 @@ function renderDwell() {
   weeks.forEach((m, i) => { if (m.status === "held") heldOrdinal.set(i, n++); });
 
   const runsByStage = new Map(STAGE_IDS.map(s => [s, []]));
-  DATA.companies.forEach(c => {
+  TREND.companies.forEach(c => {
     const atStage = new Map();
     c._perWeek.forEach((o, wi) => {
       if (!heldOrdinal.has(wi)) return;
@@ -2126,17 +2806,17 @@ function renderRecon() {
 
 const VIEWS = [
   { key: "advanced", label: "advanced stage", describe: "reached Deep Diligence or Legal",
-    pick: () => DATA.companies.filter(c => c.reachedDeep)
+    pick: () => TREND.companies.filter(c => c.reachedDeep)
       .sort((a, b) => (b.furthest - a.furthest) || a.first.localeCompare(b.first)) },
   { key: "discussed", label: "discussed", describe: "bold on at least one slide",
-    pick: () => DATA.companies.filter(c => c.discussed).sort((a, b) => b.times - a.times) },
+    pick: () => TREND.companies.filter(c => c.discussed).sort((a, b) => b.times - a.times) },
   { key: "p1", label: "P1 queue", describe: "advanced or discussed, with gaps",
-    pick: () => DATA.companies.filter(c => c.priority && c.priority.startsWith("P1"))
+    pick: () => TREND.companies.filter(c => c.priority && c.priority.startsWith("P1"))
       .sort((a, b) => b.gaps - a.gaps) },
   { key: "longest", label: "longest tracked", describe: "most weeks on a slide",
-    pick: () => DATA.companies.slice().sort((a, b) => b.appearances - a.appearances).slice(0, 26) },
+    pick: () => TREND.companies.slice().sort((a, b) => b.appearances - a.appearances).slice(0, 26) },
   { key: "onceonly", label: "seen once", describe: "a single sighting, then nothing",
-    pick: () => DATA.companies.filter(c => c.appearances === 1)
+    pick: () => TREND.companies.filter(c => c.appearances === 1)
       .sort((a, b) => (a.first || "").localeCompare(b.first || "")).slice(0, 26) },
 ];
 
@@ -2367,101 +3047,184 @@ function renderWorklist() {
     <p class="tbl-foot">${rows.length} compan${rows.length === 1 ? "y" : "ies"} · click a name for provenance</p>`;
 }
 
-/* ------------------------------------------------------------- drive index */
+/* ------------------------------------------------------------- index reach */
 
-/* How a Y was arrived at. Shown per row: the join is on name, so a Y that
+/* How a Y was arrived at. Shown on every row: both joins are on name, so a Y
    nobody can check is worse than no Y at all. */
-const MATCH_NOTE = {
-  exact:     "name matches the folder exactly",
-  alias:     "a recorded slide spelling matches the folder",
+const REACH_TIER = {
+  exact:     "the name matches exactly",
+  alias:     "matched under the folder's other recorded name",
   suffix:    "matches once corporate and descriptor words are dropped",
   prefix:    "one name is a prefix of the other",
-  ambiguous: "matches more than one folder — unresolved",
+  text:      "the name occurs in the deck's text, capitalised where it occurs",
+  ambiguous: "matches more than one record — unresolved",
 };
+
+const REACH_HOW = {
+  entity: "an extracted slide entity — a name the pipeline itself holds",
+  deck:   "found in the deck's text, outside the extracted window",
+  weak:   "found in the deck, but the name is short enough that the match may "
+          + "be an acronym in prose rather than the company",
+  ambiguous: "matches more than one record — a question, not a Y",
+  crm:    "an Affinity organisation",
+};
+
+const onSlides = r => !!(r.slides && (r.slides.how === "entity" || r.slides.how === "deck"));
+const inCrm    = r => !!(r.crm && r.crm.how === "crm");
 
 let driveFilter = "all";
 let driveText = "";
 
+const REACH_FILTERS = {
+  all:     () => true,
+  either:  r => onSlides(r) || inCrm(r),
+  slides:  r => onSlides(r),
+  crm:     r => inCrm(r),
+  both:    r => onSlides(r) && inCrm(r),
+  neither: r => !onSlides(r) && !inCrm(r),
+};
+
 function renderDrive() {
-  const meta = DATA.driveIndex;
+  const meta = DATA.indexReach;
   if (!meta) {
     document.getElementById("drive-table").innerHTML =
       '<p class="empty">No index join in this file. Run <span class="mono">'
       + 'python scripts/match_drive_index.py</span>.</p>';
+    document.getElementById("reach-vitals").innerHTML = "";
     document.getElementById("drive-def").textContent = "";
     document.getElementById("drive-foot").textContent = "";
     return;
   }
+
+  const all = meta.rows;
+  const n = all.length;
+  const c = meta.counts;
+
+  document.getElementById("reach-vitals").innerHTML = [
+    { v: n, d: "index folders", label: "Companies in the index" },
+    { v: c.either, d: pct(c.either, n), label: "Visible in either record" },
+    { v: c.slides, d: pct(c.slides, n), label: "On a deal slide" },
+    { v: c.affinity, d: pct(c.affinity, n), label: "In Affinity" },
+    { v: c.both, d: pct(c.both, n), label: "In both" },
+    { v: c.neither, d: pct(c.neither, n), label: "In neither", flag: true },
+  ].map(x => `
+    <div class="vital${x.flag ? " flag" : ""}">
+      <span class="stat-value">${x.v} <span class="stat-denom">${x.d}</span></span>
+      <span class="eyebrow">${x.label}</span>
+    </div>`).join("");
 
   document.getElementById("drive-filter").querySelectorAll("[data-drive]").forEach(b => {
     b.setAttribute("aria-pressed", String(b.dataset.drive === driveFilter));
   });
 
   const q = driveText.trim().toLowerCase();
-  let rows = DATA.companies.slice();
-  if (driveFilter === "y") rows = rows.filter(c => c.idx && c.idx.tier !== "ambiguous");
-  if (driveFilter === "n") rows = rows.filter(c => !c.idx);
-  if (q) rows = rows.filter(c => c.name.toLowerCase().includes(q));
-  rows.sort((a, b) => a.name.localeCompare(b.name));
+  let rows = all.filter(REACH_FILTERS[driveFilter] || REACH_FILTERS.all);
+  if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q)
+    || (r.desc || "").toLowerCase().includes(q));
 
-  const yes = DATA.companies.filter(c => c.idx && c.idx.tier !== "ambiguous").length;
-  const amb = DATA.companies.filter(c => c.idx && c.idx.tier === "ambiguous").length;
-  const no = DATA.companies.length - yes - amb;
-
+  const win = meta.loadedWindow || [];
   document.getElementById("drive-def").innerHTML =
-    `<b>${yes}</b> of <b>${DATA.companies.length}</b> companies have a folder, `
-    + `<b>${no}</b> do not${amb ? `, <b>${amb}</b> match more than one` : ""} · `
-    + `index: ${esc(meta.file)} · ${meta.folders} folders`
-    + (meta.version ? ` · ${esc(meta.version)}` : "");
+    `<b>${c.either}</b> of <b>${n}</b> index companies are visible in one of the `
+    + `two records, <b>${c.neither}</b> in neither`
+    + (c.weak ? `; <b>${c.weak}</b> of those turn up in the deck under a name too `
+        + "short to count as a match" : "")
+    + ` · deck: ${esc(meta.slidesFile)}, ${meta.slidePages} pages, `
+    + `${meta.slideMeetings} meetings `
+    + (meta.slideWindow ? `${meta.slideWindow[0]} – ${meta.slideWindow[1]}` : "")
+    + ` · <span class="mono">slide_observation</span> covers `
+    + `${meta.loadedMeetings} of them, from ${win[0] || "?"}`
+    + ` · CRM: ${meta.affinityRecords} Affinity organisations`
+    + ` · index: ${esc(meta.file)}${meta.version ? " · " + esc(meta.version) : ""}`;
 
-  const body = rows.map(c => {
-    const x = c.idx;
-    const ambiguous = x && x.tier === "ambiguous";
-    const hit = x && !ambiguous;
-    const verdict = ambiguous
-      ? '<span class="chip confirmed" title="matches more than one folder">?</span>'
-      : hit ? '<span class="chip has">Y</span>'
-            : '<span class="chip gap">N</span>';
-    const folder = ambiguous
-      ? `<span class="queue-detail">${x.candidates.map(esc).join(" · ")}</span>`
-      : hit
-        ? esc(x.name) + (x.name === c.name ? "" :
-            `<div class="queue-detail mono">indexed as this, not “${esc(c.name)}”</div>`)
-        : "&mdash;";
+  const verdict = (hit, ambiguous) => ambiguous
+    ? '<span class="chip confirmed" title="matches more than one record">?</span>'
+    : hit ? '<span class="chip has">Y</span>' : '<span class="chip gap">N</span>';
+
+  const body = rows.map(r => {
+    const s = r.slides, a = r.crm;
+    const sAmb = !!(s && s.how === "ambiguous");
+    const sWeak = !!(s && s.how === "weak");
+    const aAmb = !!(a && a.how === "ambiguous");
+
+    /* Slide evidence: which name it matched, how, and how much of it. */
+    let slideDetail = "&mdash;";
+    if (s && s.how === "entity") {
+      slideDetail = `<span class="tier" title="${esc(REACH_HOW.entity)}">entity</span> `
+        + `<span class="tier" title="${esc(REACH_TIER[s.tier] || "")}">${esc(s.tier)}</span>`
+        + `<div class="queue-detail">as “${esc(s.as)}” · `
+        + `${s.observations} slide appearance${s.observations === 1 ? "" : "s"}</div>`;
+    } else if (s && (s.how === "deck" || s.how === "weak")) {
+      slideDetail = `<span class="tier" title="${esc(REACH_HOW[s.how])}">`
+        + `deck text${sWeak ? ", weak" : ""}</span>`
+        + `<div class="queue-detail">${s.pages} page${s.pages === 1 ? "" : "s"} · `
+        + `${s.meetings} meeting${s.meetings === 1 ? "" : "s"}`
+        + (s.as && s.as !== r.name ? ` · as “${esc(s.as)}”` : "") + "</div>";
+    } else if (sAmb) {
+      slideDetail = `<span class="tier" title="${esc(REACH_HOW.ambiguous)}">ambiguous</span>`
+        + `<div class="queue-detail">${s.candidates.map(esc).join(" · ")}</div>`;
+    }
+
+    /* When it was last on a slide, and whether that is inside the window the
+       database actually extracted -- a 2021 folder is not the same finding as
+       a 2026 one. */
+    let lastSeen = "&mdash;";
+    if (s && s.last) {
+      lastSeen = `<span class="mono">${esc(s.last)}</span>`
+        + `<div class="queue-detail">${s.loaded ? "inside" : "before"} the extracted window</div>`;
+    } else if (s && s.how !== "ambiguous") {
+      lastSeen = '<span class="queue-detail">no dated meeting</span>';
+    }
+
+    let crmDetail = "&mdash;";
+    if (a && a.how === "crm") {
+      crmDetail = `<span class="tier" title="${esc(REACH_TIER[a.tier] || "")}">${esc(a.tier)}</span>`
+        + `<div class="queue-detail">${a.status ? esc(a.status) : "no status"}`
+        + (a.lastMeeting ? ` · last met ${esc(a.lastMeeting)}` : "")
+        + (a.name !== r.name ? ` · as “${esc(a.name)}”` : "") + "</div>";
+    } else if (aAmb) {
+      crmDetail = `<span class="tier" title="${esc(REACH_HOW.ambiguous)}">ambiguous</span>`
+        + `<div class="queue-detail">${a.candidates.map(esc).join(" · ")}</div>`;
+    }
+
+    const open = s && s.how === "entity" && s.entity != null;
     return `<tr>
-      <td><button class="name-btn" data-open="${c.id}">${esc(c.name)}</button>${
-        c.domain ? `<div class="queue-detail mono">${esc(c.domain)}</div>` : ""}</td>
-      <td>${verdict}</td>
-      <td>${folder}</td>
-      <td><span class="tier" title="${esc(x ? MATCH_NOTE[x.tier] : "no folder under any recorded spelling")}">${
-        x ? x.tier : "&mdash;"}</span></td>
-      <td>${hit && x.portfolio ? '<span class="chip has">portfolio</span>' : "&mdash;"}</td>
-      <td>${hit && x.vertical ? esc(x.vertical) : "&mdash;"}${
-        hit && x.sectors ? `<div class="queue-detail">${esc(x.sectors)}</div>` : ""}</td>
-      <td class="mono">${hit && x.modified ? esc(x.modified) : "&mdash;"}</td>
-      <td>${stageCell(c.furthest)}</td>
+      <td>${open
+          ? `<button class="name-btn" data-open="${s.entity}">${esc(r.name)}</button>`
+          : `<span class="idx-name">${esc(r.name)}</span>`}${
+        r.desc ? `<div class="queue-detail">${esc(r.desc)}</div>` : ""}</td>
+      <td>${verdict(onSlides(r), sAmb)}</td>
+      <td>${slideDetail}</td>
+      <td>${lastSeen}</td>
+      <td>${verdict(inCrm(r), aAmb)}</td>
+      <td>${crmDetail}</td>
+      <td>${r.portfolio ? '<span class="chip has">portfolio</span>' : "&mdash;"}</td>
+      <td>${r.vertical ? esc(r.vertical) : "&mdash;"}${
+        r.sectors ? `<div class="queue-detail">${esc(r.sectors)}</div>` : ""}</td>
+      <td class="mono">${r.modified ? esc(r.modified) : "&mdash;"}</td>
     </tr>`;
   }).join("");
 
   document.getElementById("drive-table").innerHTML = rows.length ? `
     <table class="wl co drive">
       <thead><tr>
-        <th>Company</th>
-        <th>In New&nbsp;Deals index?</th>
-        <th>Indexed folder</th>
-        <th>How matched</th>
+        <th>Index company</th>
+        <th>On a slide?</th>
+        <th>Slide evidence</th>
+        <th>Last on a slide</th>
+        <th>In Affinity?</th>
+        <th>Affinity record</th>
         <th>Portfolio</th>
         <th>Vertical / sector</th>
         <th>Folder modified</th>
-        <th>Furthest stage</th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table>` : `<p class="empty">Nothing matches${
       q ? " “" + esc(driveText) + "”" : ""}.</p>`;
 
   document.getElementById("drive-foot").innerHTML =
-    `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} shown · `
-    + "click a name for its evidence log";
+    `<b>${rows.length}</b> ${rows.length === 1 ? "folder" : "folders"} shown`
+    + " · a company the pipeline holds opens its evidence log; the rest are"
+    + " index rows with nothing behind them here";
 }
 
 /* ------------------------------------------------------------------ drawer */
@@ -2509,7 +3272,7 @@ function openDrawer(eid) {
   }).join("");
 
   const fields = c.fields
-    .filter(([f]) => f !== "legacy_company_id")
+    .filter(([f]) => f !== "legacy_company_id" && f !== "tags")
     .map(([f, v, src, cite]) => `<tr>
       <td class="k">${esc(f)}</td>
       <td>${fmtValue(f, v)}<span class="src" data-src="${esc(src)}">${esc(src)}</span>
@@ -2551,6 +3314,24 @@ function openDrawer(eid) {
     ${aliases.length ? `<h3>Also spelled</h3>
       <div class="queue-note mono">${aliases.map(esc).join(" &middot; ")}</div>` : ""}
 
+    <h3>Tags</h3>
+    ${CAN_WRITE ? `
+      <div class="tagwrap">
+        <div class="tagedit">
+          <input id="drawer-tags" value="${esc(tagList(c).join(", "))}"
+                 autocomplete="off" spellcheck="false" aria-label="Tags for ${esc(c.name)}"
+                 aria-autocomplete="list" placeholder="comma-separated">
+          <button type="button" id="drawer-tags-save">Save</button>
+        </div>
+        <ul class="tagsuggest" id="drawer-tags-suggest" role="listbox" hidden></ul>
+      </div>
+      <div class="tagmsg" id="drawer-tags-msg">Comma-separated. Existing tags are
+        suggested as you type; clearing the field removes them all.</div>`
+      : `<div class="queue-note">${tagList(c).length
+            ? tagChips(c) : "none"}</div>
+         <p class="note">Tags are editable when the page is served by
+           <span class="mono">scripts/serve.py</span>, not in this snapshot.</p>`}
+
     <h3>Fields and provenance</h3>
     <table class="kv">${fields || '<tr><td class="k">&mdash;</td><td>nothing recorded</td></tr>'}</table>
 
@@ -2567,6 +3348,69 @@ function openDrawer(eid) {
   drawer.setAttribute("aria-hidden", "false");
   drawer.focus();
   document.getElementById("close-drawer").addEventListener("click", closeDrawer);
+  if (CAN_WRITE) wireTagEditor(c);
+}
+
+/* The one value on this page that can be changed after a company exists.
+   See write.set_tags for why tags and not the enrichment fields: a tag is the
+   team's own label, so a careless edit contradicts no external fact and there
+   is nothing for the review queue to adjudicate. */
+function wireTagEditor(c) {
+  const input = document.getElementById("drawer-tags");
+  const save = document.getElementById("drawer-tags-save");
+  const msg = document.getElementById("drawer-tags-msg");
+  attachTagSuggest(input, document.getElementById("drawer-tags-suggest"));
+
+  input.addEventListener("keydown", e => {
+    // Enter saves, unless the completer is using it to pick a suggestion.
+    if (e.key === "Enter" && document.getElementById("drawer-tags-suggest").hidden) {
+      e.preventDefault();
+      save.click();
+    }
+  });
+
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    msg.className = "tagmsg";
+    msg.textContent = "saving…";
+    let res, out;
+    try {
+      res = await fetch("/api/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityId: c.id, tags: input.value }),
+      });
+      out = await res.json();
+    } catch (err) {
+      save.disabled = false;
+      msg.className = "tagmsg bad";
+      msg.textContent = "Could not reach the server: " + String(err);
+      return;
+    }
+    save.disabled = false;
+    if (!res.ok) {
+      msg.className = "tagmsg bad";
+      msg.textContent = out.error || res.statusText;
+      return;
+    }
+
+    // The server canonicalises (trim, de-duplicate, sort), so what comes back
+    // is what was stored -- show that rather than what was typed.
+    c.tags = out.tags;
+    input.value = out.tags.join(", ");
+    msg.className = "tagmsg";
+    msg.textContent = out.tags.length
+      ? `Saved: ${out.tags.join(", ")}`
+      : "Saved: no tags on this company.";
+
+    // Everything that reads tags is re-rendered rather than patched in place,
+    // so the table, the filter vocabulary and any active tag filter cannot
+    // drift from what was just written. A filter on a tag this edit removed
+    // simply drops the company, which is correct.
+    renderCompanies();
+    if (activePanel === "trends") renderTrends();
+    else { applyTrendFilter(); }
+  });
 }
 
 function closeDrawer() {
@@ -2574,6 +3418,229 @@ function closeDrawer() {
   scrim.classList.remove("open");
   drawer.setAttribute("aria-hidden", "true");
   if (lastFocus) lastFocus.focus();
+}
+
+/* ------------------------------------------------------------- add company */
+/*
+ * Only reachable when scripts/serve.py is serving the page. Over file:// the
+ * POST cannot go anywhere, so the button stays hidden rather than offering a
+ * save that would silently fail.
+ *
+ * The duplicate check is the server's, not a second copy of it here: the
+ * first save posts without allowDuplicate, and a 409 comes back with the
+ * matches. The warning is exactly that -- a warning. Confirming re-posts with
+ * allowDuplicate, which files a merge proposal against each match rather than
+ * merging anything.
+ */
+
+const addbox = document.getElementById("addbox");
+const addMsg = document.getElementById("add-msg");
+const addSave = document.getElementById("add-save");
+const CAN_WRITE = location.protocol === "http:" || location.protocol === "https:";
+
+let pendingDuplicate = false;   // next submit is a confirmed re-post
+
+/* ---------------------------------------------------------------- autofill */
+/*
+ * One public lookup, on request, for two fields. It fills the input and marks
+ * it; it does not save anything. The mark is the point: a value the person
+ * leaves alone is saved as source Public with the lookup's citation, and a
+ * value they edit is saved as Manual under their name, so the form has to show
+ * which of the two it is about to do before they press Save.
+ *
+ * Suggestions never overwrite something already typed, and never touch owner
+ * or round stage -- no public source knows who owns a deal here, and round
+ * stage is a locked picklist a scraped value would have to be mapped onto.
+ *
+ * The whole thing degrades to nothing: no server, no network, --no-lookup, or
+ * (much the most common case for the companies this pipeline tracks) simply
+ * not being on Wikidata all land in the same place, which is the form as it
+ * was before.
+ */
+
+const SUGGEST_FIELDS = { website: "add-website", hq_country: "add-country" };
+
+// field -> the exact string suggested, while the input still holds it.
+let suggested = {};
+let suggestionCitation = null;
+
+function clearSuggestions() {
+  suggested = {};
+  suggestionCitation = null;
+  Object.entries(SUGGEST_FIELDS).forEach(([field, id]) => {
+    document.getElementById(id).classList.remove("suggested");
+    document.getElementById("prov-" + field).textContent = "";
+  });
+  document.getElementById("add-lookup-msg").innerHTML = "";
+}
+
+// A field counts as accepted only while it still holds exactly what was
+// suggested. Editing one character makes it the person's own value.
+function acceptedFields() {
+  return Object.keys(suggested).filter(
+    f => document.getElementById(SUGGEST_FIELDS[f]).value === suggested[f]);
+}
+
+function syncSuggestionMarks() {
+  const live = new Set(acceptedFields());
+  Object.entries(SUGGEST_FIELDS).forEach(([field, id]) => {
+    const on = live.has(field);
+    document.getElementById(id).classList.toggle("suggested", on);
+    document.getElementById("prov-" + field).textContent = on ? "suggested" : "";
+  });
+}
+
+async function runLookup() {
+  const btn = document.getElementById("add-lookup");
+  const msg = document.getElementById("add-lookup-msg");
+  const name = document.getElementById("add-name").value.trim();
+  if (!name) { msg.innerHTML = "Type a company name first."; return; }
+
+  clearSuggestions();
+  btn.disabled = true;
+  msg.innerHTML = `Looking up ${esc(name)}…`;
+  let out;
+  try {
+    const res = await fetch("/api/lookup?name=" + encodeURIComponent(name));
+    out = await res.json();
+  } catch (err) {
+    btn.disabled = false;
+    msg.innerHTML = `Lookup failed: ${esc(String(err))}. Type the values in.`;
+    return;
+  }
+  btn.disabled = false;
+
+  const fields = out.fields || {};
+  const names = Object.keys(fields);
+  if (!names.length) {
+    msg.innerHTML = `Nothing to suggest — ${esc(out.note || "no match")}.`;
+    return;
+  }
+
+  // Only ever fills an empty field. Overwriting something typed would make
+  // the lookup a correction, which it is in no position to be.
+  const filled = [];
+  names.forEach(f => {
+    const input = document.getElementById(SUGGEST_FIELDS[f]);
+    if (input.value.trim()) return;
+    input.value = fields[f];
+    suggested[f] = fields[f];
+    filled.push(f);
+  });
+  suggestionCitation = out.citation;
+  syncSuggestionMarks();
+
+  msg.innerHTML = filled.length
+    ? `Filled ${filled.map(f => FIELD_LABEL[f]).join(" and ")} from
+       <b>${esc(out.label || name)}</b>${out.note ? " (" + esc(out.note) + ")" : ""} on
+       Wikidata. Edit anything that is wrong — what you leave as suggested is
+       saved with that page as its citation.`
+    : `<b>${esc(out.label || name)}</b> is on Wikidata, but every field it could
+       fill already has something typed in it. Nothing was changed.`;
+}
+
+function initAdd() {
+  if (!CAN_WRITE) return;
+  const sel = document.getElementById("add-stage");
+  (DATA.roundStages || []).forEach(name => {
+    const o = document.createElement("option");
+    o.value = o.textContent = name;
+    sel.appendChild(o);
+  });
+  attachTagSuggest(document.getElementById("add-tags"),
+                   document.getElementById("add-tags-suggest"));
+  document.getElementById("add-lookup").hidden = false;
+  document.getElementById("add-lookup").addEventListener("click", runLookup);
+  Object.values(SUGGEST_FIELDS).forEach(id =>
+    document.getElementById(id).addEventListener("input", syncSuggestionMarks));
+  document.getElementById("add-open").hidden = false;
+}
+
+function openAdd() {
+  lastFocus = document.activeElement;
+  addbox.hidden = false;
+  scrim.classList.add("open");
+  addMsg.innerHTML = "";
+  pendingDuplicate = false;
+  addSave.textContent = "Save";
+  clearSuggestions();
+  document.getElementById("add-name").focus();
+}
+
+function closeAdd() {
+  addbox.hidden = true;
+  scrim.classList.remove("open");
+  if (lastFocus) lastFocus.focus();
+}
+
+function dupWarning(dupes) {
+  const items = dupes.map(d => `<li><b>${esc(d.name)}</b>
+      <span class="mono">EV${String(d.entity_id).padStart(4, "0")}</span>
+      &mdash; matches on ${esc(d.matched_on)}
+      <span class="mono">${esc(d.matched_value)}</span></li>`).join("");
+  return `<div class="addnote">
+      <b>This looks like a company you already have.</b>
+      <ul>${items}</ul>
+      Press Save again to add it anyway. It will be created as a separate
+      company and each match filed as an open merge proposal on the review
+      queue &mdash; nothing is merged here.
+    </div>`;
+}
+
+async function submitAdd(e) {
+  e.preventDefault();
+  const accepted = acceptedFields();
+  const body = {
+    name:       document.getElementById("add-name").value,
+    website:    document.getElementById("add-website").value,
+    hq_country: document.getElementById("add-country").value,
+    stage:      document.getElementById("add-stage").value,
+    owner_name: document.getElementById("add-owner").value,
+    tags:       document.getElementById("add-tags").value,
+    allowDuplicate: pendingDuplicate,
+    // Suggested values still standing untouched, and where they came from.
+    // The server writes these as Public against this citation and everything
+    // else as Manual; a field edited since the lookup is simply not in here.
+    accepted,
+    citation: accepted.length ? suggestionCitation : null,
+  };
+
+  addSave.disabled = true;
+  let res, out;
+  try {
+    res = await fetch("/api/company", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    out = await res.json();
+  } catch (err) {
+    addSave.disabled = false;
+    addMsg.innerHTML = `<div class="addnote bad">Could not reach the server: ${esc(String(err))}</div>`;
+    return;
+  }
+  addSave.disabled = false;
+
+  if (res.status === 409) {
+    pendingDuplicate = true;
+    addSave.textContent = "Add anyway";
+    addMsg.innerHTML = dupWarning(out.duplicates || []);
+    return;
+  }
+  if (!res.ok) {
+    pendingDuplicate = false;
+    addSave.textContent = "Save";
+    addMsg.innerHTML = `<div class="addnote bad">${esc(out.error || res.statusText)}</div>`;
+    return;
+  }
+
+  // Saved. The page is rendered from the database on every load, so the
+  // simplest way to show the new company with its funnel, coverage and
+  // worklist rollups all recomputed is to ask for it again.
+  // The id survives the reload in sessionStorage so the drawer can open on
+  // it, and the save visibly lands somewhere.
+  try { sessionStorage.setItem("justAdded", String(out.entityId)); } catch (_) {}
+  location.reload();
 }
 
 /* ------------------------------------------------------------------ events */
@@ -2634,10 +3701,33 @@ document.getElementById("tabs").addEventListener("keydown", e => {
   document.getElementById("tab-" + next).focus();
 });
 
-scrim.addEventListener("click", closeDrawer);
+scrim.addEventListener("click", () => {
+  if (!addbox.hidden) closeAdd(); else closeDrawer();
+});
 
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && drawer.classList.contains("open")) closeDrawer();
+  if (e.key !== "Escape") return;
+  if (!addbox.hidden) closeAdd();
+  else if (drawer.classList.contains("open")) closeDrawer();
+});
+
+document.getElementById("add-open").addEventListener("click", openAdd);
+document.getElementById("add-close").addEventListener("click", closeAdd);
+document.getElementById("add-cancel").addEventListener("click", closeAdd);
+addbox.addEventListener("submit", submitAdd);
+
+// Editing any field after a duplicate warning drops the confirmation: the
+// value being saved is no longer the one that was warned about.
+addbox.addEventListener("input", () => {
+  if (!pendingDuplicate) return;
+  pendingDuplicate = false;
+  addSave.textContent = "Save";
+  addMsg.innerHTML = "";
+});
+
+document.getElementById("trend-tag").addEventListener("change", e => {
+  trendTag = e.target.value;
+  renderTrends();
 });
 
 document.getElementById("co-search").addEventListener("input", e => {
@@ -2663,20 +3753,22 @@ renderVitals();
 renderCatbar();
 renderCompanies();
 renderDrive();
-renderFunnel();
-renderAttention();
-renderMix();
-renderNew();
-renderCoverage();
-renderDwell();
+checkTrendParity();
+renderTrends();
 renderRecon();
-renderViews();
 renderLegend();
 renderQueue();
 renderWorklist();
 showPanel("pipeline", false);
 readHash();
 if (activePanel === "pipeline") { renderCatbar(); renderCompanies(); }
+initAdd();
+
+// A company added a moment ago, reopened after the reload that showed it.
+let justAdded = null;
+try { justAdded = sessionStorage.getItem("justAdded"); sessionStorage.removeItem("justAdded"); }
+catch (_) { /* private mode; the company is on the page either way */ }
+if (justAdded && byId.has(Number(justAdded))) openDrawer(justAdded);
 </script>
 </body>
 </html>

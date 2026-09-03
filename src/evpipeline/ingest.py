@@ -19,19 +19,38 @@ Design decisions worth knowing before reading the code:
 
 3. Affinity's `Round Size` is re-read from the CSV export to recover the 9
    genuine 0.0 values that the workbook flattened to unknown (§5).
+
+Ported from SQLite alongside db.py. Four mechanical changes recur throughout,
+and one is not mechanical:
+
+  * ``?`` placeholders became ``%s``.
+  * ``INSERT OR IGNORE`` became ``INSERT ... ON CONFLICT DO NOTHING``. Every
+    such statement targets a real unique constraint -- alias(alias_text),
+    idx_obs_grain, gap_status's PK -- so the untargeted form is safe: it
+    swallows a duplicate-key collision and nothing else.
+  * ``cur.lastrowid`` became ``RETURNING``, in ``load_entities`` and ``_put``.
+  * ``GROUP_CONCAT`` became ``string_agg``, which needs an explicit delimiter
+    and an explicit ``::text`` cast on an integer column.
+
+The non-mechanical one: Postgres rejects a bare column in the select list of a
+grouped query, and rejects a select-list alias in ``HAVING``. Both appeared
+here -- ``_domain_conflicts`` had ``HAVING n > 1``, and
+``flag_duplicate_listings`` selected an ungrouped ``o.slide_page`` -- so both
+would have failed at parse time rather than returning a wrong answer.
 """
 
 from __future__ import annotations
 
 import itertools
 import re
-import sqlite3
 from pathlib import Path
 
 import pandas as pd
+import psycopg
 
 from . import vocab
 from .db import finish_run, start_run
+from .write import domain_from_website
 
 INGEST_USER = "ingest"
 
@@ -114,42 +133,48 @@ def _iso(v) -> str | None:
 # Vocabulary seeding
 # ---------------------------------------------------------------------------
 
-def seed_vocab(conn: sqlite3.Connection) -> None:
-    conn.executemany(
-        "INSERT INTO stage (stage_id, name, rank) VALUES (?, ?, ?)",
-        [(rank, name, rank) for rank, name in vocab.STAGES],
-    )
-    conn.executemany("INSERT INTO thesis_area (code, name) VALUES (?, ?)", vocab.THESIS_AREAS)
-    conn.executemany("INSERT INTO source (name, precedence) VALUES (?, ?)", vocab.SOURCES)
-    conn.executemany(
-        "INSERT INTO working_group (name) VALUES (?)", [(w,) for w in vocab.WORKING_GROUPS]
-    )
-    conn.executemany("INSERT INTO round_stage (name, rank) VALUES (?, ?)", vocab.ROUND_STAGES)
-    conn.executemany(
-        "INSERT INTO affinity_status (name, rank) VALUES (?, ?)", vocab.AFFINITY_STATUSES
-    )
-    conn.executemany(
-        "INSERT INTO enrichment_priority (name, tier) VALUES (?, ?)",
-        vocab.ENRICHMENT_PRIORITIES,
-    )
-    conn.executemany(
-        "INSERT INTO slide_section_map (raw_section, stage_id, thesis_code, note) "
-        "VALUES (?, ?, ?, ?)",
-        [
+def seed_vocab(conn: psycopg.Connection) -> None:
+    """Seed the locked picklists (§4).
+
+    OR IGNORE because schema.sql already seeds these tables as part of the
+    DDL, so a plain INSERT collides on every primary key. The two are not
+    quite identical -- vocab.py adds the ``Scale-Up`` working group and the
+    ``Series C`` round stage, and orders the two sub-diligence stages the
+    other way round -- so seeding the union, with schema.sql's committed
+    stage_ids winning any conflict, is what keeps both definitions valid.
+    The stage tie-break is documented as arbitrary in schema.sql: nothing
+    downstream depends on the relative order of ranks 2 and 3, only on both
+    being below Preliminary Diligence.
+    """
+    # executemany() is a cursor method in psycopg3; sqlite3 exposed it on the
+    # connection as a shortcut and psycopg3 does not, so the cursor is explicit.
+    def seed(table: str, columns: str, rows) -> None:
+        placeholders = ", ".join(["%s"] * (columns.count(",") + 1))
+        with conn.cursor() as cur:
+            cur.executemany(
+                f"INSERT INTO {table} ({columns}) VALUES ({placeholders}) "
+                "ON CONFLICT DO NOTHING",
+                list(rows),
+            )
+
+    seed("stage", "stage_id, name, rank", ((rank, name, rank) for rank, name in vocab.STAGES))
+    seed("thesis_area", "code, name", vocab.THESIS_AREAS)
+    seed("source", "name, precedence", vocab.SOURCES)
+    seed("working_group", "name", ((w,) for w in vocab.WORKING_GROUPS))
+    seed("round_stage", "name, rank", vocab.ROUND_STAGES)
+    seed("affinity_status", "name, rank", vocab.AFFINITY_STATUSES)
+    seed("enrichment_priority", "name, tier", vocab.ENRICHMENT_PRIORITIES)
+    seed(
+        "slide_section_map",
+        "raw_section, stage_id, thesis_code, note",
+        (
             (raw, vocab.STAGE_BY_NAME[stage], thesis, note)
             for raw, stage, thesis, note in vocab.SLIDE_SECTION_MAP
-        ],
+        ),
     )
-    conn.executemany(
-        "INSERT INTO pass_reason_category (name, sort) VALUES (?, ?)",
-        vocab.PASS_REASON_CATEGORIES,
-    )
-    conn.executemany(
-        "INSERT INTO outcome_type (name, is_terminal) VALUES (?, ?)", vocab.OUTCOME_TYPES
-    )
-    conn.executemany(
-        "INSERT INTO source_channel (name) VALUES (?)", [(c,) for c in vocab.SOURCE_CHANNELS]
-    )
+    seed("pass_reason_category", "name, sort", vocab.PASS_REASON_CATEGORIES)
+    seed("outcome_type", "name, is_terminal", vocab.OUTCOME_TYPES)
+    seed("source_channel", "name", ((c,) for c in vocab.SOURCE_CHANNELS))
     conn.commit()
 
 
@@ -157,30 +182,28 @@ def seed_vocab(conn: sqlite3.Connection) -> None:
 # Entities and aliases
 # ---------------------------------------------------------------------------
 
-def load_entities(conn: sqlite3.Connection, companies: pd.DataFrame) -> dict[str, int]:
+def load_entities(conn: psycopg.Connection, companies: pd.DataFrame) -> dict[str, int]:
     """One entity per raw workbook row. Returns company_name -> entity_id."""
     name_to_id: dict[str, int] = {}
     for row in companies.itertuples(index=False):
         name = _clean(row.company_name)
         if name is None:
             continue
-        website = _clean(row.website)
-        # Domain is the primary match key (§9), so store it bare.
-        domain = None
-        if website:
-            domain = re.sub(r"^https?://", "", website, flags=re.IGNORECASE)
-            domain = re.sub(r"^www\.", "", domain, flags=re.IGNORECASE).rstrip("/").casefold()
-            domain = domain.split("/")[0] or None
+        # Domain is the primary match key (§9), so store it bare. Shared with
+        # the hand-add path so a company typed into the form and one loaded
+        # from the workbook produce the same key for the same website.
+        domain = domain_from_website(_clean(row.website))
 
         cur = conn.execute(
-            "INSERT INTO entity (canonical_name, domain) VALUES (?, ?)", (name, domain)
+            "INSERT INTO entity (canonical_name, domain) VALUES (%s, %s) RETURNING entity_id",
+            (name, domain),
         )
-        eid = int(cur.lastrowid)
+        eid = int(cur.fetchone()[0])
         name_to_id[name] = eid
 
         conn.execute(
             "INSERT INTO alias (entity_id, alias_text, alias_norm, source, match_method) "
-            "VALUES (?, ?, ?, 'Slides', 'exact')",
+            "VALUES (%s, %s, %s, 'Slides', 'exact')",
             (eid, name, norm_name(name)),
         )
 
@@ -192,9 +215,10 @@ def load_entities(conn: sqlite3.Connection, companies: pd.DataFrame) -> dict[str
                 if not v or v == name:
                     continue
                 conn.execute(
-                    "INSERT OR IGNORE INTO alias "
+                    "INSERT INTO alias "
                     "(entity_id, alias_text, alias_norm, source, match_method) "
-                    "VALUES (?, ?, ?, 'Slides', 'manual')",
+                    "VALUES (%s, %s, %s, 'Slides', 'manual') "
+                    "ON CONFLICT DO NOTHING",
                     (eid, v, norm_name(v)),
                 )
     conn.commit()
@@ -229,7 +253,7 @@ def canonical_score(name: str) -> tuple[int, int, int]:
     return (clean, len(name.split()), len(name))
 
 
-def _domain_conflicts(conn: sqlite3.Connection) -> None:
+def _domain_conflicts(conn: psycopg.Connection) -> None:
     """Entities sharing a domain are near-certain duplicates. Propose, don't act.
 
     Domain is the most stable key available (§9), so a shared domain is strong
@@ -237,18 +261,22 @@ def _domain_conflicts(conn: sqlite3.Connection) -> None:
     human: the queue is the decision record, and a wrong auto-merge is far
     harder to undo than an unreviewed proposal.
     """
+    # HAVING COUNT(*) > 1, not `HAVING n > 1`: Postgres does not resolve a
+    # select-list alias in HAVING, so the SQLite form was a parse error here.
     rows = conn.execute(
-        "SELECT domain, GROUP_CONCAT(entity_id) ids, COUNT(*) n FROM entity "
-        "WHERE domain IS NOT NULL GROUP BY domain HAVING n > 1"
+        "SELECT domain, array_agg(entity_id) AS ids FROM entity "
+        "WHERE domain IS NOT NULL GROUP BY domain HAVING COUNT(*) > 1"
     ).fetchall()
     for r in rows:
-        ids = [int(x) for x in r["ids"].split(",")]
+        # array_agg gives a real list of ints, so the round trip through a
+        # comma-joined string that GROUP_CONCAT forced is gone, and with it the
+        # assumption that no domain value contains a comma.
+        ids = [int(x) for x in r["ids"]]
         names = {
             int(x["entity_id"]): str(x["canonical_name"])
             for x in conn.execute(
-                "SELECT entity_id, canonical_name FROM entity WHERE entity_id IN "
-                f"({','.join('?' * len(ids))})",
-                ids,
+                "SELECT entity_id, canonical_name FROM entity WHERE entity_id = ANY(%s)",
+                (ids,),
             )
         }
         keep = max(ids, key=lambda i: canonical_score(names[i]))
@@ -257,7 +285,7 @@ def _domain_conflicts(conn: sqlite3.Connection) -> None:
                 continue
             conn.execute(
                 "INSERT INTO review_item (kind, entity_id, target_id, detail, confidence, "
-                "proposed_by) VALUES ('merge_proposal', ?, ?, ?, 0.95, ?)",
+                "proposed_by) VALUES ('merge_proposal', %s, %s, %s, 0.95, %s)",
                 (
                     other,
                     keep,
@@ -271,7 +299,7 @@ def _domain_conflicts(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def propose_line_wraps(conn: sqlite3.Connection) -> None:
+def propose_line_wraps(conn: psycopg.Connection) -> None:
     """Flag names that look like PDF line-break fragments of another name.
 
     A name is a candidate if it starts with '/' (a wrapped continuation) or is
@@ -288,12 +316,12 @@ def propose_line_wraps(conn: sqlite3.Connection) -> None:
     for eid, name in names.items():
         if name.startswith("/"):
             conn.execute(
-                "UPDATE entity SET is_phantom = 1, phantom_reason = ? WHERE entity_id = ?",
+                "UPDATE entity SET is_phantom = 1, phantom_reason = %s WHERE entity_id = %s",
                 ("leading slash: PDF line-wrap continuation", eid),
             )
             conn.execute(
                 "INSERT INTO review_item (kind, entity_id, detail, confidence, proposed_by) "
-                "VALUES ('line_wrap_candidate', ?, ?, 0.9, ?)",
+                "VALUES ('line_wrap_candidate', %s, %s, 0.9, %s)",
                 (eid, f"{name!r} begins with '/'; wrapped continuation", INGEST_USER),
             )
             continue
@@ -312,7 +340,7 @@ def propose_line_wraps(conn: sqlite3.Connection) -> None:
                 conn.execute(
                     "INSERT INTO review_item (kind, entity_id, target_id, detail, "
                     "confidence, proposed_by) "
-                    "VALUES ('merge_proposal', ?, ?, ?, ?, ?)",
+                    "VALUES ('merge_proposal', %s, %s, %s, %s, %s)",
                     (
                         eid,
                         other_id,
@@ -327,7 +355,7 @@ def propose_line_wraps(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def propose_groups(conn: sqlite3.Connection) -> None:
+def propose_groups(conn: psycopg.Connection) -> None:
     """Flag slash/comma-joined slide entries that name several companies (§6 Q2).
 
     Left as one entity with a group_split review item, so the decision stays
@@ -346,7 +374,7 @@ def propose_groups(conn: sqlite3.Connection) -> None:
             if len(parts) >= 2:
                 conn.execute(
                     "INSERT INTO review_item (kind, entity_id, detail, confidence, "
-                    "proposed_by) VALUES ('group_split', ?, ?, 0.7, ?)",
+                    "proposed_by) VALUES ('group_split', %s, %s, 0.7, %s)",
                     (
                         int(r["entity_id"]),
                         f"{name!r} may name {len(parts)} companies: "
@@ -357,7 +385,7 @@ def propose_groups(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def import_v2_proposals(conn: sqlite3.Connection, v2_names: set[str]) -> int:
+def import_v2_proposals(conn: psycopg.Connection, v2_names: set[str]) -> int:
     """Record which rows v2_DEDUPED removed, as reviewable proposals.
 
     v2 is a sibling artifact, not an authority: it is imported so its work is
@@ -372,7 +400,7 @@ def import_v2_proposals(conn: sqlite3.Connection, v2_names: set[str]) -> int:
         if str(r["canonical_name"]) not in v2_names:
             conn.execute(
                 "INSERT INTO review_item (kind, entity_id, detail, confidence, proposed_by) "
-                "VALUES ('merge_proposal', ?, ?, 0.5, 'v2_DEDUPED')",
+                "VALUES ('merge_proposal', %s, %s, 0.5, 'v2_DEDUPED')",
                 (
                     int(r["entity_id"]),
                     (
@@ -390,7 +418,7 @@ def import_v2_proposals(conn: sqlite3.Connection, v2_names: set[str]) -> int:
 # Meetings and observations
 # ---------------------------------------------------------------------------
 
-def load_meetings(conn: sqlite3.Connection, stage_hist: pd.DataFrame) -> None:
+def load_meetings(conn: psycopg.Connection, stage_hist: pd.DataFrame) -> None:
     """Insert observed meetings, then fill absent Mondays explicitly (§9)."""
     dates = sorted({_iso(d) for d in stage_hist.meeting_date.dropna()} - {None})
     pages = (
@@ -401,7 +429,7 @@ def load_meetings(conn: sqlite3.Connection, stage_hist: pd.DataFrame) -> None:
     )
     for d in dates:
         conn.execute(
-            "INSERT INTO meeting (meeting_date, status, slide_page) VALUES (?, 'held', ?)",
+            "INSERT INTO meeting (meeting_date, status, slide_page) VALUES (%s, 'held', %s)",
             (d, int(pages[d]) if d in pages and pd.notna(pages[d]) else None),
         )
 
@@ -419,8 +447,9 @@ def load_meetings(conn: sqlite3.Connection, stage_hist: pd.DataFrame) -> None:
         for k in range(1, round(gap / 7)):
             d = (pd.Timestamp(prev) + pd.Timedelta(days=7 * k)).date().isoformat()
             conn.execute(
-                "INSERT OR IGNORE INTO meeting (meeting_date, status, note) "
-                "VALUES (?, 'not_extracted', ?)",
+                "INSERT INTO meeting (meeting_date, status, note) "
+                "VALUES (%s, 'not_extracted', %s) "
+                "ON CONFLICT DO NOTHING",
                 (
                     d,
                     (
@@ -432,7 +461,7 @@ def load_meetings(conn: sqlite3.Connection, stage_hist: pd.DataFrame) -> None:
     conn.commit()
 
 
-def load_observations(conn: sqlite3.Connection, stage_hist: pd.DataFrame) -> dict[str, int]:
+def load_observations(conn: psycopg.Connection, stage_hist: pd.DataFrame) -> dict[str, int]:
     """Load the append-only evidence log, resolving slide names via aliases."""
     alias_exact = {
         str(r["alias_text"]): int(r["entity_id"])
@@ -460,9 +489,10 @@ def load_observations(conn: sqlite3.Connection, stage_hist: pd.DataFrame) -> dic
                 method = "normalised"
                 # Record the alias so the next load resolves it exactly.
                 conn.execute(
-                    "INSERT OR IGNORE INTO alias "
+                    "INSERT INTO alias "
                     "(entity_id, alias_text, alias_norm, source, match_method) "
-                    "VALUES (?, ?, ?, 'Slides', 'exact')",
+                    "VALUES (%s, %s, %s, 'Slides', 'exact') "
+                    "ON CONFLICT DO NOTHING",
                     (eid, name, norm_name(name)),
                 )
                 alias_exact[name] = eid
@@ -476,9 +506,10 @@ def load_observations(conn: sqlite3.Connection, stage_hist: pd.DataFrame) -> dic
         counts[method] += 1
         stage_name = _clean(row.stage_on_slide)
         conn.execute(
-            "INSERT OR IGNORE INTO slide_observation "
+            "INSERT INTO slide_observation "
             "(meeting_date, entity_id, name_on_slide, stage_id, raw_section, is_bold, "
-            " bold_color, slide_page) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
+            " bold_color, slide_page) VALUES (%s, %s, %s, %s, %s, %s, NULL, %s) "
+            "ON CONFLICT DO NOTHING",
             (
                 date,
                 eid,
@@ -493,14 +524,14 @@ def load_observations(conn: sqlite3.Connection, stage_hist: pd.DataFrame) -> dic
     for name, n in unresolved.items():
         conn.execute(
             "INSERT INTO review_item (kind, detail, proposed_by) "
-            "VALUES ('first_appearance', ?, ?)",
+            "VALUES ('first_appearance', %s, %s)",
             (f"slide name {name!r} ({n} observation(s)) matches no entity", INGEST_USER),
         )
     conn.commit()
     return counts
 
 
-def flag_duplicate_listings(conn: sqlite3.Connection) -> None:
+def flag_duplicate_listings(conn: psycopg.Connection) -> None:
     """Queue cases where one company appears twice on a single slide.
 
     Distinct from the legitimate dual-listing (agenda column + thesis
@@ -510,16 +541,20 @@ def flag_duplicate_listings(conn: sqlite3.Connection) -> None:
     double-entry; whether the slide really listed the company twice or the
     extractor read one row twice needs a human to look at the page.
     """
+    # slide_page is aggregated with MIN rather than selected bare: it is not in
+    # the GROUP BY, so Postgres rejects the SQLite form outright. MIN is the
+    # right reducer for a page reference -- the earliest page the company
+    # appears on is the one a reviewer should open first.
     for r in conn.execute(
-        """SELECT o.meeting_date, o.entity_id, o.slide_page,
-                  GROUP_CONCAT(DISTINCT o.name_on_slide) names
+        """SELECT o.meeting_date, o.entity_id, MIN(o.slide_page) AS slide_page,
+                  string_agg(DISTINCT o.name_on_slide, ', ') AS names
            FROM slide_observation o
            GROUP BY o.meeting_date, o.entity_id
            HAVING COUNT(*) > 1 AND COUNT(DISTINCT o.name_on_slide) > 1"""
     ).fetchall():
         conn.execute(
             "INSERT INTO review_item (kind, entity_id, detail, proposed_by) "
-            "VALUES ('duplicate_listing', ?, ?, ?)",
+            "VALUES ('duplicate_listing', %s, %s, %s)",
             (
                 int(r["entity_id"]),
                 (
@@ -532,7 +567,7 @@ def flag_duplicate_listings(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def flag_stage_jumps(conn: sqlite3.Connection) -> None:
+def flag_stage_jumps(conn: psycopg.Connection) -> None:
     """Queue stage jumps >2 levels and any regression (§8, §9)."""
     for r in conn.execute(
         "SELECT entity_id, from_date, to_date, delta FROM v_stage_transition "
@@ -540,7 +575,8 @@ def flag_stage_jumps(conn: sqlite3.Connection) -> None:
     ).fetchall():
         kind = "stage_jump" if r["delta"] > 0 else "stage_regression"
         conn.execute(
-            "INSERT INTO review_item (kind, entity_id, detail, proposed_by) VALUES (?, ?, ?, ?)",
+            "INSERT INTO review_item (kind, entity_id, detail, proposed_by) "
+            "VALUES (%s, %s, %s, %s)",
             (
                 kind,
                 int(r["entity_id"]),
@@ -559,7 +595,7 @@ def flag_stage_jumps(conn: sqlite3.Connection) -> None:
 # ---------------------------------------------------------------------------
 
 def _put(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     eid: int,
     field: str,
     value,
@@ -572,7 +608,8 @@ def _put(
         return None
     cur = conn.execute(
         "INSERT INTO field_value (entity_id, field, value_text, value_num, is_zero, "
-        "source, citation, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "source, citation, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+        "RETURNING field_value_id",
         (
             eid,
             field,
@@ -584,11 +621,11 @@ def _put(
             INGEST_USER,
         ),
     )
-    return int(cur.lastrowid)
+    return int(cur.fetchone()[0])
 
 
 def load_field_values(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     companies: pd.DataFrame,
     name_to_id: dict[str, int],
     affinity_zeros: set[str],
@@ -641,7 +678,7 @@ def load_field_values(
             if fv:
                 conn.execute(
                     "INSERT INTO money_value (field_value_id, amount_usd, currency) "
-                    "VALUES (?, ?, 'USD')",
+                    "VALUES (%s, %s, 'USD')",
                     (fv, float(rs)),
                 )
         elif aff_id and aff_id in affinity_zeros:
@@ -651,13 +688,13 @@ def load_field_values(
             if fv:
                 conn.execute(
                     "INSERT INTO money_value (field_value_id, amount_usd, currency) "
-                    "VALUES (?, 0.0, 'USD')",
+                    "VALUES (%s, 0.0, 'USD')",
                     (fv,),
                 )
     conn.commit()
 
 
-def flag_predating_relationships(conn: sqlite3.Connection) -> int:
+def flag_predating_relationships(conn: psycopg.Connection) -> int:
     """Set relationship_predates_crm where first_meeting precedes the slides.
 
     §8 rejects a first_meeting earlier than first_slide_date unless this flag
@@ -677,7 +714,7 @@ def flag_predating_relationships(conn: sqlite3.Connection) -> int:
     for r in rows:
         conn.execute(
             "INSERT INTO field_value (entity_id, field, value_text, source, created_by) "
-            "VALUES (?, 'relationship_predates_crm', '1', 'Affinity', ?)",
+            "VALUES (%s, 'relationship_predates_crm', '1', 'Affinity', %s)",
             (int(r["entity_id"]), INGEST_USER),
         )
     conn.commit()
@@ -685,7 +722,7 @@ def flag_predating_relationships(conn: sqlite3.Connection) -> int:
 
 
 def load_gap_status(
-    conn: sqlite3.Connection, companies: pd.DataFrame, name_to_id: dict[str, int]
+    conn: psycopg.Connection, companies: pd.DataFrame, name_to_id: dict[str, int]
 ) -> None:
     """Seed three-state gap tracking from the workbook's needs_* flags.
 
@@ -708,8 +745,9 @@ def load_gap_status(
         for flag, field in flags.items():
             if bool(getattr(row, flag)):
                 conn.execute(
-                    "INSERT OR IGNORE INTO gap_status (entity_id, field, state) "
-                    "VALUES (?, ?, 'not_checked')",
+                    "INSERT INTO gap_status (entity_id, field, state) "
+                    "VALUES (%s, %s, 'not_checked') "
+                    "ON CONFLICT DO NOTHING",
                     (eid, field),
                 )
     conn.commit()
@@ -720,7 +758,7 @@ def load_gap_status(
 # ---------------------------------------------------------------------------
 
 def build(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     draft_path: str | Path,
     v2_path: str | Path | None = None,
     affinity_path: str | Path | None = None,

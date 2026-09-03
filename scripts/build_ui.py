@@ -3,10 +3,11 @@
 
     python scripts/build_ui.py            # -> ui/index.html
 
-Reads data/pipeline.db, inlines the data into ui/template.html and writes
-ui/index.html. The data is inlined rather than fetched because the page is
-opened over file:// where fetch() is blocked, and because a single portable
-file is easier to hand to someone than a directory plus a server.
+Reads the database named by DATABASE_URL, inlines the data into
+ui/template.html and writes ui/index.html. The data is inlined rather than
+fetched because the page is opened over file:// where fetch() is blocked, and
+because a single portable file is easier to hand to someone than a directory
+plus a server.
 
 The output is deliberately not committed: it embeds confidential deal data.
 
@@ -26,13 +27,16 @@ one place that re-derives them for the cohort (screen_diligence.py).
 from __future__ import annotations
 
 import json
-import sqlite3
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import psycopg
+
+from evpipeline import connect
+from evpipeline import tags as tagsmod
 from evpipeline.metrics import (
     GAP_FIELDS,
     coverage_report,
@@ -44,19 +48,24 @@ from evpipeline.metrics import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DB = REPO_ROOT / "data" / "pipeline.db"
 TEMPLATE = REPO_ROOT / "ui" / "template.html"
 OUTPUT = REPO_ROOT / "ui" / "index.html"
 
 PLACEHOLDER = '"__PIPELINE_DATA__"'
 
 
-def collect(conn: sqlite3.Connection) -> dict:
-    conn.row_factory = sqlite3.Row
-
+def collect(conn: psycopg.Connection) -> dict:
+    # No row_factory assignment: db.connect() already installs the Row factory
+    # that supports both name and positional access.
     stages = [
         {"id": r["stage_id"], "name": r["name"]}
         for r in conn.execute("SELECT stage_id, name FROM stage ORDER BY stage_id")
+    ]
+
+    # The round_stage picklist, so the add form's select is the locked
+    # vocabulary rather than a second hardcoded copy of it in the template.
+    round_stages = [
+        r["name"] for r in conn.execute("SELECT name FROM round_stage ORDER BY rank")
     ]
 
     meetings = [
@@ -75,7 +84,7 @@ def collect(conn: sqlite3.Connection) -> dict:
     have: dict[int, set[str]] = {}
     for r in conn.execute(
         f"""SELECT entity_id, field FROM v_field_current
-            WHERE field IN ({",".join("?" * len(GAP_FIELDS))})
+            WHERE field IN ({",".join(["%s"] * len(GAP_FIELDS))})
               AND (value_text IS NOT NULL OR value_num IS NOT NULL)""",
         GAP_FIELDS,
     ):
@@ -124,10 +133,24 @@ def collect(conn: sqlite3.Connection) -> dict:
             [r["field"], val, r["source"], r["citation"], r["created_by"]]
         )
 
+    # Tags, parsed into a list here so the page never has to know that they
+    # are stored as one comma-separated string. The suggestion vocabulary is
+    # NOT emitted alongside: the page derives it from the tags it is showing,
+    # so a filter can never offer a tag that matches nothing on screen.
+    tag_lists: dict[int, list[str]] = {
+        int(r["entity_id"]): tagsmod.parse(r["value_text"])
+        for r in conn.execute(
+            "SELECT entity_id, value_text FROM v_field_current WHERE field = %s",
+            (tagsmod.FIELD,),
+        )
+    }
+
     companies = []
     for r in conn.execute(
         "SELECT entity_id, canonical_name, domain, is_phantom, phantom_reason, merged_into "
-        "FROM entity ORDER BY canonical_name COLLATE NOCASE"
+        # lower(), not COLLATE NOCASE, which is SQLite-only. This is the
+        # expression idx_entity_name_lower is built on, so it sorts on the index.
+        "FROM entity ORDER BY lower(canonical_name)"
     ):
         eid = int(r["entity_id"])
         f = funnel.get(eid, {})
@@ -154,6 +177,7 @@ def collect(conn: sqlite3.Connection) -> dict:
                 "gaps": gaps.get(eid, 0),
                 "missing": missing,
                 "gapState": gap_state.get(eid, {}),
+                "tags": tag_lists.get(eid, []),
                 "obs": obs.get(eid, []),
                 "fields": fields.get(eid, []),
             }
@@ -180,6 +204,18 @@ def collect(conn: sqlite3.Connection) -> dict:
         )
     ]
 
+    # Companies created through the add form rather than extracted. The alias
+    # source is the marker: ingest only ever writes 'Slides' there, and
+    # write.add_company only ever writes 'Manual'. screen_diligence reads this
+    # so a hand-added company is not screened straight back out of the
+    # interface that created it.
+    hand_added = [
+        int(r[0])
+        for r in conn.execute(
+            "SELECT DISTINCT entity_id FROM alias WHERE source = 'Manual' ORDER BY entity_id"
+        )
+    ]
+
     aliases: dict[int, list[str]] = {}
     for r in conn.execute(
         "SELECT entity_id, alias_text FROM alias ORDER BY alias_text"
@@ -193,8 +229,10 @@ def collect(conn: sqlite3.Connection) -> dict:
     return {
         "builtAt": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "stages": stages,
+        "roundStages": round_stages,
         "meetings": meetings,
         "companies": companies,
+        "handAdded": hand_added,
         "review": review,
         "aliases": aliases,
         "coverage": cov,
@@ -215,14 +253,11 @@ def collect(conn: sqlite3.Connection) -> dict:
 
 
 def main() -> int:
-    if not DB.exists():
-        print(f"missing {DB}; run scripts/build_db.py first", file=sys.stderr)
-        return 1
     if not TEMPLATE.exists():
         print(f"missing {TEMPLATE}", file=sys.stderr)
         return 1
 
-    conn = sqlite3.connect(DB)
+    conn = connect()
     data = collect(conn)
     conn.close()
 

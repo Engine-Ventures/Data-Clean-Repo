@@ -89,6 +89,7 @@ Installed by `requirements.txt` (fully pinned, including transitive deps):
 | `duckdb` | SQL directly over dataframes and Parquet/CSV files |
 | `pyarrow` | Parquet I/O and the Arrow interchange format |
 | `openpyxl` | lets pandas read and write `.xlsx` |
+| `pypdf` | extracts the deal-deck text for the index-reach join |
 | `pytest` | tests |
 | `ruff` | linter and formatter (replaces black + flake8 + isort) |
 

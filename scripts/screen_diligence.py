@@ -48,7 +48,14 @@ from pathlib import Path
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-WORKBOOK = REPO_ROOT / "src" / "DiligenceCompanies_EVPipeline (1).xlsx"
+# The cohort workbook has lived both in data/raw/ (where .gitignore says the
+# confidential sources belong) and loose in src/. Check both.
+WORKBOOK = next(
+    (p for p in (REPO_ROOT / "data" / "raw" / "DiligenceCompanies_EVPipeline (1).xlsx",
+                 REPO_ROOT / "src" / "DiligenceCompanies_EVPipeline (1).xlsx")
+     if p.exists()),
+    REPO_ROOT / "data" / "raw" / "DiligenceCompanies_EVPipeline (1).xlsx",
+)
 
 # Stage ids from evpipeline.vocab.STAGES. Diligence is 4 and up; 1-3 are
 # Meetings This Week, Hold / Nurture and NewCo / Fellows.
@@ -93,6 +100,21 @@ def workbook_cohort(path: Path) -> tuple[dict[int, str], dict[str, int]]:
 def screen(payload: dict, cohort: dict[int, str], variants: dict[str, int]) -> tuple[dict, dict]:
     ents = {int(c["id"]): c for c in payload["companies"]}
     aliases = {int(k): list(v) for k, v in payload.get("aliases", {}).items()}
+
+    # Companies added by hand since the workbook was cut are not in its
+    # Companies sheet, so the cohort join would screen them straight back out
+    # of the interface that created them. They are kept unconditionally, under
+    # their own name -- with no slide observations they sit at zero
+    # appearances under "All companies" and in no stage category, which is the
+    # truthful position for a company the slides have never carried.
+    cohort = dict(cohort)
+    cohort.update(
+        {
+            eid: ents[eid]["name"]
+            for eid in (int(x) for x in payload.get("handAdded", []))
+            if eid in ents and eid not in cohort
+        }
+    )
 
     missing = sorted(set(cohort) - set(ents))
 

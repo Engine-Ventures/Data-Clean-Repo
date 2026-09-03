@@ -15,10 +15,15 @@ source .venv/bin/activate          # see SETUP.md to build the venv
 python scripts/build_db.py         # data/raw/*.xlsx -> data/pipeline.db
 python scripts/build_ui.py         # data/pipeline.db -> ui/index.html
 python scripts/screen_diligence.py # screen it to the diligence cohort
-python scripts/match_drive_index.py # flag which companies have a Drive folder
-pytest                             # 69 regression tests
+python scripts/match_drive_index.py # how much of the New Deals index is visible
+python scripts/serve.py            # the same interface, with writes enabled
+pytest                             # 139 regression tests
 ruff check .
 ```
+
+`build_ui.py` produces a portable read-only snapshot; `serve.py` renders the
+same template from the live database on every request and adds the three
+write surfaces described under **Writing from the browser** below.
 
 `build_db.py` always builds into a fresh file (`--force` to replace an
 existing one), so a load can be repeated and two builds diffed.
@@ -32,7 +37,14 @@ in `data/raw/`:
 | --- | --- |
 | `EV_Deal_Pipeline_Clean_Dataset_DRAFT.xlsx` | the raw extraction; 498 rows, 2,169 observations |
 | `EV_Deal_Pipeline_Clean_Dataset_v2_DEDUPED.xlsx` | a sibling dedup attempt, imported as *proposals* |
-| `affinity_export_2026-09-01.csv` | 581 Affinity records; enrichment only |
+| `affinity_export_2026-09-01.csv` | the Affinity Deal Flow view; 2,869 rows, 2,815 organisations |
+| `DiligenceCompanies_EVPipeline (1).xlsx` | the 185-company advanced-stage cohort |
+| `Index, New Deals Companies, v2026-08-28-01.xlsx` | 982 Drive folders under *New Deals / 02. Companies* |
+| `Copy of Monday - New Deal Meeting.pdf` | the whole deck: 1,018 pages, 153 dated meetings back to Aug 2021 |
+
+Only 251 of the Affinity rows are linked to a slide company; the rest are
+passes, pre-screens and sourcing records. Enrichment uses the linked ones,
+and the index-reach join below uses all of them.
 
 ## What the layer does
 
@@ -79,9 +91,55 @@ src/evpipeline/
   ingest.py                 workbook -> database, and the review-queue detectors
   metrics.py                derived metrics; every count carries its coverage
   validate.py               the §8 write-path rules
+  write.py                  creating a company and setting tags, through §8
+  tags.py                   tag canonical form and derived vocabulary
+  lookup.py                 the add form's one public lookup (Wikidata)
 scripts/build_db.py         CLI
-tests/                      69 tests: anchors, validation, merge queue
+scripts/match_drive_index.py how much of the Drive index the record covers
+scripts/serve.py            local workbench with the write endpoints
+tests/                      139 tests: anchors, validation, merge queue,
+                            hand-add, tags, lookup, index reach
 ```
+
+## Writing from the browser
+
+`scripts/serve.py` binds 127.0.0.1 and has no authentication; it is a local
+tool over confidential deal data and does not belong on a network interface.
+Everything it writes goes through `validate.write_field`, so a browser write
+obeys the same §8 rules as `python -m evpipeline.validate --batch`.
+
+**Add a company.** Name, website, country, round stage, owner and tags. The
+website is effectively required because a new record needs a domain (§8) and
+that is the only place one can come from. A name that matches an existing
+company warns rather than blocks: confirming creates the company anyway and
+files each match as an open merge proposal. Nothing is auto-merged.
+
+**Autofill.** Pressing *Look up* asks Wikidata once for the company's official
+website (P856) and headquarters country (P159 → P17) and fills whichever of
+those two fields are still empty. A suggestion is marked in the page as
+suggested and is written with `source = Public` and the Wikidata entity URL as
+its citation; edit the field and it becomes an ordinary `Manual` write under
+your name. The distinction is visible before you save, because it is what the
+save is about to record.
+
+Two limits worth knowing before relying on it. Wikidata's coverage of
+early-stage private companies is thin, so most companies here return nothing —
+and the match must be exact on a normalised name, because the search API's top
+hit for a startup name is routinely a large public company that shares a word.
+A missing suggestion costs nothing; a wrong country on a deal record does.
+It is also the only thing in this repo that reaches the internet: the company
+name you typed goes to wikidata.org. `--no-lookup` turns it off.
+
+**Tags.** Free text, comma-separated, one field per company, editable from the
+company drawer — the only value the browser can change after creation. Tags
+are stored in `field_value` like any other field (append-only, provenanced)
+rather than in a table of their own; see the note at the top of `tags.py` for
+why. They are *not* a worklist gap: an untagged company is untagged, not
+incomplete, so no coverage denominator moves when you use them. Tags already
+in use are suggested as you type, in the add form and the drawer, and the
+Trends panel has a tag filter that re-derives every rollup on it — funnel,
+coverage, dwell, weekly mix, intake and the trace — over just the tagged
+companies, using the same rules `screen_diligence.py` uses for the build.
 
 ## Findings from the load
 
@@ -179,7 +237,7 @@ that nothing is merged, deleted or resolved at load time.
 ## Advanced-stage screen
 
 The deal team rescoped the deliverable on 2026-09-02 to companies that reached
-Preliminary Diligence or beyond. `src/DiligenceCompanies_EVPipeline (1).xlsx`
+Preliminary Diligence or beyond. `DiligenceCompanies_EVPipeline (1).xlsx`
 is that cohort — 185 companies — and `scripts/screen_diligence.py` screens the
 built interface to match it:
 
@@ -231,36 +289,106 @@ likely `Lila Sciences`/EV0028). Both sit in the workbook's own `Stage History`
 sheet. Related: `Attune Neurosci` (EV0017) and `Attune Neurosciences` (EV0080)
 are both present — a dedup the workbook did not make.
 
-## Drive index overlap
+## Index reach
 
-`scripts/match_drive_index.py` answers a question the slides cannot: of the
-companies that reached diligence, which ones does EV already hold a folder for?
-It joins the built interface against
-`src/Index, New Deals Companies, v2026-08-28-01.xlsx` — 982 distinct company
-folders under *New Deals / 02. Companies*, each tagged with sector, vertical, a
-one-line description and whether it is a portfolio company — and writes a Y/N
-plus the matched folder into the payload. **83 of the 185 companies have a
-folder; 102 do not.** The 102 are the point: a deal that reached Preliminary
-Diligence with nothing in storage under that name.
+`scripts/match_drive_index.py` answers the question the other way round from
+the one the tab used to ask. The old measure took the 185 diligence companies
+and asked which had a Drive folder. This one takes the **index** as the
+denominator and asks how much of it the record can see at all:
 
-The index has no domain and no entity id, so the join is on name, and slide
-spellings are not folder names. It is a ladder of four tiers, and the tier is
-carried into the payload and shown on every row, so no Y is unaccountable:
+```bash
+python scripts/build_ui.py             # faithful full build
+python scripts/screen_diligence.py     # -> the 185-company diligence cohort
+python scripts/match_drive_index.py    # -> the Index reach tab
+```
 
-| Tier | Rule | n |
-| --- | --- | --- |
-| `exact` | normalised canonical name == index company | 72 |
-| `alias` | a recorded slide spelling matches (`WAVR` → `WAVR Technologies`) | 3 |
-| `suffix` | equal after dropping corporate/descriptor tokens (`EnCharge` → `EnCharge AI`) | 5 |
-| `prefix` | one name is a string prefix of the other, ≥8 characters on the shorter side (`Attune Neurosci` → `Attune Neurosciences`) | 3 |
+`Index, New Deals Companies, v2026-08-28-01.xlsx` lists 982 company folders
+under *New Deals / 02. Companies*, each tagged with sector, vertical, a
+one-line description and whether it is a portfolio company. Two of them
+(`_Temp`, `_Academics`) are scaffolding rather than companies and are excluded,
+leaving **980**. Each is looked for in the two records this repo is built from:
 
-Sector words are deliberately *not* in the suffix list: `Mobius Bio` and
-`Mobius` are not the same claim, so that pair reads N rather than being asserted.
-A tier that hits more than one folder is recorded as `ambiguous` and shown as a
-question, not resolved on the script's own judgement — the same rule the merge
-proposals follow. None occur at present. Like `screen_diligence.py` this runs
-over the *built* interface rather than the database, so the join has one
-definition and does not fork `build_ui.py`, and it is idempotent.
+| Record | What it is |
+| --- | --- |
+| slides | the whole deck — 1,018 pages, 153 dated meetings, 2021-08-23 to 2026-08-31 |
+| Affinity | the whole Deal Flow export — 2,815 organisations |
+
+**705 of the 980 are visible in one or the other (72%); 275 are visible in
+neither.** 425 are on a slide, 601 are in Affinity, 321 are in both. A folder
+in neither column is material in storage for a company that never reached a
+deal meeting slide and has no CRM record — either genuinely outside the deal
+process, or a gap in the two records this pipeline treats as its evidence.
+Six of the 275 are marked portfolio companies — `Axoft - Dr. Jia Liu`,
+`Biobot.io`, `CFS`, `Sync Computing`, `Syzygy Plasmonics`, `WOHO` — and all
+six carry the same folder-modified date, 2023-11-07, which is the bulk
+back-fill the index was seeded from rather than anything about the deal. `CFS`
+is the one with a `weak` deck hit: the acronym is on six pages, but at three
+characters that is not a match this script will assert.
+
+### Reading the slides side
+
+The slides join reads the **deck**, not the database. `slide_observation`
+holds 47 of the deck's 153 meetings (2025-10-14 onward), so joining the index
+against the loaded population would score a 2021 folder as unseen purely
+because the load window opens in 2025. Every row therefore carries the meeting
+it was last seen on and whether that is inside the extracted window, so the
+narrower reading is still available on the tab. Of the 425 on a slide, 113
+resolve to an extracted entity the pipeline holds; 312 are found only in the
+deck's text.
+
+Both joins are on name — the index carries no domain and no entity id — so the
+tier is carried into the payload and shown on every row:
+
+| Tier | Rule |
+| --- | --- |
+| `exact` | normalised name == the slide entity or Affinity organisation |
+| `alias` | the folder's other recorded name matches |
+| `suffix` | equal after dropping corporate/descriptor tokens (`EnCharge` → `EnCharge AI`) |
+| `prefix` | one name is a string prefix of the other, ≥8 characters on the shorter side |
+| `text` | the name occurs in the deck's text as a whole token sequence |
+
+Sector words are deliberately *not* in the suffix list, and `prefix` needs
+eight characters, so `Cetos` reads N against Affinity's `Cetos Water` rather
+than being asserted. A tier hitting more than one target is `ambiguous` and
+shown as a question, not resolved on the script's judgement — one occurs,
+`Plaid Semiconductors` against both `Plaid Semi` and `Plaid Semiconductor`.
+
+Two rules do the real work on the text tier, and both exist because a bad Y is
+worse than an N:
+
+- **An occurrence has to be capitalised where it occurs.** Slides capitalise
+  company names and prose does not. Without this rule `_Temp` matches 64 pages
+  of the word "temp", and `Helix` matches "double helix". Of the 980, two are
+  rejected as prose on this rule alone (`Meter` and `Everywhere`) — and
+  `resonant link`, lower-cased in the index, still catches `Resonant Link` on
+  the slide, which a case-sensitive rule would have missed along with
+  `MiraTerra`, `LeadOptik`, `GreenBlu` and `LightLogiq`.
+- **A name of three characters or fewer is a `weak` hit, counted apart.**
+  `TPL` on one page is as likely to be an acronym in prose as the company.
+  Five folders land here (`2Pi`, `6K`, `CFS`, `KdT`, `TPL`); three of them are
+  in Affinity anyway.
+
+21 folders qualify themselves in parentheses, so the head name and the
+parenthetical are both searched and the row records which one hit:
+`Alithia (Vertical GaN)` is on the deck's first pipeline slide as Alithia, and
+`Trener Robotics (fka T-robotics)` is on the slides and the Fund III list as
+T-Robotics. Ten of the 21 are visible only once the parenthetical is set aside
+or searched on its own, so taking the folder name whole would have read them
+as unseen.
+
+**The deck stamps three January 2023 meetings as 2022.** Read oldest-first the
+title dates must strictly increase; the meetings of 2023-01-03, 01-09 and
+01-17 are all filed as 2022 and all sit above a correctly-stamped December
+2022. They are corrected by advancing the year until the order holds, and the
+corrections are printed rather than assumed. Taking the deck's dates literally
+instead folds 34 meetings into one, which would move every "last seen" date
+below the break. The deck's text is cached in `data/slide_text.json`, keyed on
+the PDF's size and mtime, because extracting 1,018 pages takes ten seconds.
+
+Like `screen_diligence.py` this runs over the *built* interface rather than
+rewriting `build_ui.py`, and it is idempotent. `scripts/serve.py` computes the
+same join once at startup, so the served page carries the tab too;
+`--no-reach` skips it.
 
 ## Not done
 
@@ -268,12 +396,15 @@ definition and does not fork `build_ui.py`, and it is idempotent.
   `ui/template.html` and writes `ui/index.html`: a single portable file with
   five tabs — **Companies** (every company in each diligence category, on three
   bases: latest position, ever in category, furthest reached; screened to the
-  four diligence stages, see above), **Drive index** (Y/N per company against
-  the New Deals folder index, see below), **Trends**
+  four diligence stages, see above), **Index reach** (one row per New Deals
+  folder, and whether the deck or Affinity can see it, see above), **Trends**
   (funnel, most-discussed, coverage, dwell, weekly stage mix, intake rate, and
-  the per-company trace), **Review queue**, and **Enrichment**. Editing is not
-  wired up: the §8 write surface in `src/evpipeline/validate.py` needs a server
-  to be reachable from a browser. The §9 slide generator is not built.
+  the per-company trace), **Review queue**, and **Enrichment**. Served by
+  `scripts/serve.py` it also writes: add a company, and edit tags. Editing
+  enrichment values, resolving gaps and executing merges are still
+  command-line only — those change what the record asserts about a company,
+  which needs a provenance and review conversation that tags do not. The §9
+  slide generator is not built.
 - Extraction is not re-run. `bold_color` needs the PDF, and the deck holds 209
   meetings back to Aug 2021 against the 43 loaded here.
 - §7 capture — pass reasons, outcomes, sourcer, valuations, founders,

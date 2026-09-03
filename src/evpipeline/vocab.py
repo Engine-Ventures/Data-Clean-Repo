@@ -8,13 +8,33 @@ from __future__ import annotations
 
 # Stage funnel, ordered. stage_id == rank so that ORDER BY / MAX() work on it
 # directly and "furthest stage" is just MAX(stage_id).
+#
+# seed.sql is authoritative for these ids and this module matches it. That is
+# not a style preference: ranks 2 and 3 used to be assigned the other way round
+# here, while the DDL's inline seed assigned them as below, and the two
+# disagreed for the whole life of the SQLite database. `INSERT OR IGNORE` made
+# the `stage` table take the DDL's ids, but ingest writes
+# slide_observation.stage_id from STAGE_BY_NAME *directly* -- it consults
+# neither the `stage` table nor slide_section_map -- so 709 observation rows
+# resolved to the wrong stage name: 476 Hold / Nurture rows read as
+# "NewCo / Fellows" and 233 NewCo rows read as "Hold / Nurture", changing the
+# furthest-stage label of 57 companies. No metric moved (every threshold in
+# v_entity_funnel is >= 4, and both ranks are below Preliminary Diligence),
+# which is exactly why nobody noticed: the arithmetic was right and only the
+# labels lied. Full account in MIGRATION.md.
+#
+# The old comment here said the 2/3 tie-break was arbitrary because "nothing
+# downstream depends on it". That was true of the arithmetic and false of the
+# labels. tests/test_vocab.py now asserts this list and the seeded `stage`
+# table agree in both directions, so the next disagreement is a red test
+# rather than a mislabelled UI.
 STAGES: list[tuple[int, str]] = [
     (7, "Legal Diligence / Def Docs"),
     (6, "Negotiate / Offer"),
     (5, "Deep Diligence"),
     (4, "Preliminary Diligence"),
-    (3, "NewCo / Fellows"),
-    (2, "Hold / Nurture"),
+    (3, "Hold / Nurture"),
+    (2, "NewCo / Fellows"),
     (1, "Meetings This Week"),
 ]
 
