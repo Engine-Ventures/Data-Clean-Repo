@@ -48,7 +48,7 @@ from pathlib import Path
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-WORKBOOK = REPO_ROOT / "src" / "DiligenceCompanies_EVPipeline (1).xlsx"
+WORKBOOK = REPO_ROOT / "src" / "evpipeline" / "DiligenceCompanies_EVPipeline (1).xlsx"
 
 # Stage ids from evpipeline.vocab.STAGES. Diligence is 4 and up; 1-3 are
 # Meetings This Week, Hold / Nurture and NewCo / Fellows.
