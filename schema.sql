@@ -357,9 +357,13 @@ CREATE VIEW v_observation AS
 SELECT
     o.observation_id,
     o.meeting_date,
-    COALESCE((SELECT CAST(new_value AS INTEGER) FROM slide_observation_override v
-              WHERE v.observation_id = o.observation_id AND v.field = 'entity_id'),
-             o.entity_id)                                    AS entity_id,
+    -- override, then merge redirect, then the raw extraction value
+    COALESCE(
+        me.merged_into,
+        (SELECT CAST(new_value AS INTEGER) FROM slide_observation_override v
+         WHERE v.observation_id = o.observation_id AND v.field = 'entity_id'),
+        o.entity_id)                                          AS entity_id,
+    o.entity_id                                               AS raw_entity_id,
     o.name_on_slide,
     COALESCE((SELECT CAST(new_value AS INTEGER) FROM slide_observation_override v
               WHERE v.observation_id = o.observation_id AND v.field = 'stage_id'),
@@ -372,7 +376,22 @@ SELECT
              o.bold_color)                                    AS bold_color,
     o.raw_section,
     o.slide_page
-FROM slide_observation o;
+FROM slide_observation o
+-- Resolve the observation onto the LIVE entity, following any merge.
+--
+-- Without this join, entity.merged_into is decoration: setting it changes no
+-- count, the merged-away company keeps its own funnel row, and the population
+-- never falls. Everything downstream -- v_entity_funnel, v_entity_discussion,
+-- v_dwell, v_stage_transition -- reads through this view, so joining here is
+-- what makes a merge mean something, and it does so without ever editing
+-- slide_observation, which the append-only rule forbids.
+--
+-- One hop is sufficient by construction: actions.merge_entities refuses to
+-- merge into an entity that is itself merged, so chains cannot form.
+LEFT JOIN entity me ON me.entity_id = COALESCE(
+    (SELECT CAST(new_value AS INTEGER) FROM slide_observation_override v
+     WHERE v.observation_id = o.observation_id AND v.field = 'entity_id'),
+    o.entity_id);
 
 -- Resolve an entity through any merge chain (one hop is enough by construction:
 -- merges always target a live entity).

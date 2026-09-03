@@ -20,3 +20,16 @@ data/
 # so the data cannot live in a separate file. Commit ui/template.html and
 # scripts/build_ui.py; rebuild the output with `python scripts/build_ui.py`.
 ui/index.html
+
+# Deal data by TYPE, not just by location.
+# data/ was not enough: two workbooks reached GitHub by sitting in src/, which
+# no path rule covered. Spreadsheets, extracts and databases are confidential
+# wherever they are put, so match the extension anywhere in the tree.
+*.xlsx
+*.xls
+*.csv
+*.db
+*.sqlite
+*.sqlite3
+*.parquet
+~$*

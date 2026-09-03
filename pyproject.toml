@@ -11,3 +11,4 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "FURB", "ISC", "EXE"]
 # happen after the sys.path line by construction.
 "scripts/build_db.py" = ["E402"]
 "tests/conftest.py" = ["E402"]
+"scripts/serve.py" = ["E402"]

@@ -1,0 +1,371 @@
+"""The verbs that turn a review proposal into a recorded decision.
+
+Everything here is a *decision*, not a derivation. The ingest pipeline proposes
+(103 merge candidates, 14 group splits, 5 duplicate listings); these functions
+are how a person accepts, rejects or defers one, and they are the only sanctioned
+way the population changes.
+
+Three rules the whole module obeys:
+
+1. **Nothing is deleted.** A merge sets `entity.merged_into` and redirects;
+   a phantom is flagged. `slide_observation` is never touched, because the
+   evidence log is the extraction record and corrections belong in
+   `slide_observation_override`. The consequence is that every decision is
+   reversible — see `unmerge`.
+2. **Every decision carries who and when.** `review_item` gains a state, a
+   resolver and a timestamp. A count that dropped from 498 is explainable
+   three months later.
+3. **One hop, never a chain.** `merge_entities` refuses to merge into an
+   entity that is itself merged, which is what lets `v_observation` resolve
+   with a single join rather than a recursive CTE.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+
+from .validate import ValidationError, check_new_entity, write_field
+
+REVIEW_STATES = {"open", "accepted", "rejected", "deferred"}
+
+
+def _entity(conn: sqlite3.Connection, entity_id: int) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT entity_id, canonical_name, domain, merged_into, is_phantom "
+        "FROM entity WHERE entity_id = ?",
+        (entity_id,),
+    ).fetchone()
+    if row is None:
+        raise ValidationError(f"no entity {entity_id}")
+    return row
+
+
+def live_count(conn: sqlite3.Connection) -> int:
+    """The population as it currently stands: not merged away, not a phantom."""
+    return int(
+        conn.execute(
+            "SELECT COUNT(*) FROM entity WHERE merged_into IS NULL AND is_phantom = 0"
+        ).fetchone()[0]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Merge
+# ---------------------------------------------------------------------------
+
+
+def merge_entities(
+    conn: sqlite3.Connection,
+    src_id: int,
+    dst_id: int,
+    user: str,
+    note: str = "",
+) -> dict:
+    """Merge `src` into `dst`. Returns what changed.
+
+    `src` keeps its row and its observations; it gains a `merged_into` pointer,
+    and `v_observation` resolves through that, so every view collapses the two
+    companies into one without a single row being rewritten.
+
+    Aliases move to `dst`, because the point of the alias table is that every
+    spelling ever seen on a slide resolves to the live company. After the merge
+    `src`'s own name is one of those spellings.
+    """
+    src, dst = _entity(conn, src_id), _entity(conn, dst_id)
+
+    if src_id == dst_id:
+        raise ValidationError("cannot merge an entity into itself")
+    if src["merged_into"] is not None:
+        raise ValidationError(
+            f"{src['canonical_name']!r} is already merged into entity "
+            f"{src['merged_into']}; unmerge it first"
+        )
+    if dst["merged_into"] is not None:
+        raise ValidationError(
+            f"cannot merge into {dst['canonical_name']!r} because it is itself "
+            f"merged into entity {dst['merged_into']}. Merging into a merged "
+            f"entity would create a chain, and the views resolve one hop only"
+        )
+
+    moved = [
+        r["alias_text"]
+        for r in conn.execute("SELECT alias_text FROM alias WHERE entity_id = ?", (src_id,))
+    ]
+    # alias_text is globally unique, so a spelling already recorded against the
+    # target is simply dropped rather than moved.
+    conn.execute(
+        "UPDATE OR IGNORE alias SET entity_id = ?, match_method = 'manual' "
+        "WHERE entity_id = ?",
+        (dst_id, src_id),
+    )
+    conn.execute("DELETE FROM alias WHERE entity_id = ?", (src_id,))
+    conn.execute(
+        "UPDATE entity SET merged_into = ? WHERE entity_id = ?", (dst_id, src_id)
+    )
+    conn.execute(
+        "INSERT INTO review_item (kind, entity_id, target_id, detail, proposed_by, "
+        "state, resolved_by, resolved_at, resolution_note) "
+        "VALUES ('merge_proposal', ?, ?, ?, ?, 'accepted', ?, datetime('now'), ?)",
+        (
+            src_id,
+            dst_id,
+            f"merged {src['canonical_name']!r} into {dst['canonical_name']!r}",
+            user,
+            user,
+            note or "applied via the review queue",
+        ),
+    )
+    conn.commit()
+    return {
+        "merged": src["canonical_name"],
+        "into": dst["canonical_name"],
+        "aliases_moved": moved,
+        "live_count": live_count(conn),
+    }
+
+
+def unmerge(conn: sqlite3.Connection, src_id: int, user: str) -> dict:
+    """Undo a merge. The reason nothing is ever deleted.
+
+    Aliases that moved are not moved back: which spelling belongs to which
+    company is a separate judgement, and guessing would be worse than leaving
+    them where a person put them.
+    """
+    src = _entity(conn, src_id)
+    if src["merged_into"] is None:
+        raise ValidationError(f"{src['canonical_name']!r} is not merged")
+    conn.execute("UPDATE entity SET merged_into = NULL WHERE entity_id = ?", (src_id,))
+    conn.execute(
+        "INSERT INTO review_item (kind, entity_id, detail, proposed_by, state, "
+        "resolved_by, resolved_at, resolution_note) "
+        "VALUES ('merge_proposal', ?, ?, ?, 'rejected', ?, datetime('now'), ?)",
+        (
+            src_id,
+            f"unmerged {src['canonical_name']!r}",
+            user,
+            user,
+            "merge reversed; aliases left where they were",
+        ),
+    )
+    conn.commit()
+    return {"unmerged": src["canonical_name"], "live_count": live_count(conn)}
+
+
+# ---------------------------------------------------------------------------
+# Phantoms and review state
+# ---------------------------------------------------------------------------
+
+
+def mark_phantom(conn: sqlite3.Connection, entity_id: int, reason: str, user: str) -> dict:
+    """Flag a row that is not a company — a line-wrap fragment, an event name.
+
+    Marked, not deleted: `Q1'26)` carries nine observations, and those pages
+    are evidence about the slides even though the row is not a company.
+    """
+    if not reason.strip():
+        raise ValidationError("a phantom needs a stated reason")
+    ent = _entity(conn, entity_id)
+    conn.execute(
+        "UPDATE entity SET is_phantom = 1, phantom_reason = ? WHERE entity_id = ?",
+        (f"{reason.strip()} (marked by {user})", entity_id),
+    )
+    conn.commit()
+    return {
+        "phantom": ent["canonical_name"],
+        "reason": reason.strip(),
+        "live_count": live_count(conn),
+    }
+
+
+def unmark_phantom(conn: sqlite3.Connection, entity_id: int, user: str) -> dict:
+    ent = _entity(conn, entity_id)
+    conn.execute(
+        "UPDATE entity SET is_phantom = 0, phantom_reason = NULL WHERE entity_id = ?",
+        (entity_id,),
+    )
+    conn.commit()
+    return {"restored": ent["canonical_name"], "live_count": live_count(conn)}
+
+
+def resolve_review(
+    conn: sqlite3.Connection, review_id: int, state: str, user: str, note: str = ""
+) -> dict:
+    """Record a decision on one review item without acting on it.
+
+    Distinct from accepting a merge: this is how "no, these are two different
+    companies" or "come back to this" gets written down, so the queue shrinks
+    as judgement is applied rather than only when data changes.
+    """
+    if state not in REVIEW_STATES:
+        raise ValidationError(f"{state!r} is not a review state")
+    row = conn.execute(
+        "SELECT review_id, kind, state FROM review_item WHERE review_id = ?", (review_id,)
+    ).fetchone()
+    if row is None:
+        raise ValidationError(f"no review item {review_id}")
+    conn.execute(
+        "UPDATE review_item SET state = ?, resolved_by = ?, resolved_at = datetime('now'), "
+        "resolution_note = ? WHERE review_id = ?",
+        (state, user, note or None, review_id),
+    )
+    conn.commit()
+    return {
+        "review_id": review_id,
+        "kind": row["kind"],
+        "was": row["state"],
+        "now": state,
+        "open_items": int(
+            conn.execute(
+                "SELECT COUNT(*) FROM review_item WHERE state = 'open'"
+            ).fetchone()[0]
+        ),
+    }
+
+
+def accept_merge_proposal(conn: sqlite3.Connection, review_id: int, user: str) -> dict:
+    """Apply a queued merge proposal and close it in one step.
+
+    This is what the Accept button calls. The proposal already carries the
+    oriented src -> target pair that ingest derived from a shared domain, so
+    accepting is one decision rather than a re-entry of both ids.
+    """
+    row = conn.execute(
+        "SELECT review_id, kind, entity_id, target_id, state FROM review_item "
+        "WHERE review_id = ?",
+        (review_id,),
+    ).fetchone()
+    if row is None:
+        raise ValidationError(f"no review item {review_id}")
+    if row["kind"] != "merge_proposal":
+        raise ValidationError(
+            f"review item {review_id} is a {row['kind']}, not a merge proposal"
+        )
+    if row["state"] != "open":
+        raise ValidationError(f"review item {review_id} is already {row['state']}")
+    if row["target_id"] is None:
+        raise ValidationError(
+            f"review item {review_id} has no merge target — it needs a canonical "
+            f"choice before it can be applied"
+        )
+
+    result = merge_entities(
+        conn, int(row["entity_id"]), int(row["target_id"]), user,
+        note=f"accepted review item {review_id}",
+    )
+    conn.execute(
+        "UPDATE review_item SET state = 'accepted', resolved_by = ?, "
+        "resolved_at = datetime('now'), resolution_note = ? WHERE review_id = ?",
+        (user, "merge applied", review_id),
+    )
+    conn.commit()
+    result["review_id"] = review_id
+    result["open_items"] = int(
+        conn.execute("SELECT COUNT(*) FROM review_item WHERE state = 'open'").fetchone()[0]
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Adding a company
+# ---------------------------------------------------------------------------
+
+
+# Fields the intake form offers, with the picklist each is checked against.
+# Anything not listed is free text. `stage` is the funding round, not a funnel
+# position -- the funnel comes from slide observations and cannot be typed in.
+INTAKE_FIELDS = {
+    "website": None,
+    "hq_country": None,
+    "stage": "round_stage",
+    "round_size_usd": None,
+    "owner_name": None,
+    "affinity_status": "affinity_status",
+    "working_group": "working_group",
+    "source_channel": None,
+    "last_meeting": None,
+    "description": None,
+}
+
+
+def add_entity(
+    conn: sqlite3.Connection,
+    name: str,
+    domain: str,
+    user: str,
+    fields: list[dict] | None = None,
+) -> dict:
+    """Add a company that never appeared on a slide — the NewCo case.
+
+    A domain is required (§8): name-only records are what created the
+    fragmentation this layer exists to resolve.
+
+    `fields` is what the intake form collects: a list of
+    `{field, value, source, citation, is_zero}`. Each one goes through
+    `validate.write_field`, so the form cannot bypass a rule the rest of the
+    layer enforces — a public claim without a citation is refused, a value off
+    a locked picklist is refused, and a zero must say it means zero.
+
+    A field left blank is simply not written. That is the point of the
+    three-state rule: absent means nobody has looked, which is different from
+    a recorded zero and different again from "checked, genuinely unavailable".
+    """
+    name = name.strip()
+    if not name:
+        raise ValidationError("a company needs a name")
+    check_new_entity(domain)
+    domain = domain.strip().casefold()
+
+    clash = conn.execute(
+        "SELECT entity_id, canonical_name FROM entity WHERE domain = ?", (domain,)
+    ).fetchone()
+    if clash:
+        raise ValidationError(
+            f"domain {domain} already belongs to {clash['canonical_name']!r} "
+            f"(entity {clash['entity_id']})"
+        )
+
+    cur = conn.execute(
+        "INSERT INTO entity (canonical_name, domain) VALUES (?, ?)", (name, domain)
+    )
+    eid = int(cur.lastrowid)
+    from .ingest import norm_name
+
+    conn.execute(
+        "INSERT INTO alias (entity_id, alias_text, alias_norm, source, match_method) "
+        "VALUES (?, ?, ?, 'Manual', 'manual')",
+        (eid, name, norm_name(name)),
+    )
+    written, skipped = [], []
+    for item in fields or []:
+        field = item.get("field")
+        if field not in INTAKE_FIELDS:
+            raise ValidationError(f"{field!r} is not an intake field")
+
+        raw = item.get("value")
+        text = None if raw is None else str(raw).strip()
+        is_zero = bool(item.get("is_zero"))
+
+        if not text and not is_zero:
+            skipped.append(field)      # blank stays unknown, deliberately
+            continue
+
+        source = item.get("source") or "Manual"
+        citation = (item.get("citation") or "").strip() or None
+
+        if field == "round_size_usd":
+            num = 0.0 if is_zero else float(text)
+            write_field(conn, eid, field, None, source, user,
+                        citation=citation, value_num=num, is_zero=is_zero)
+        else:
+            write_field(conn, eid, field, text, source, user, citation=citation)
+        written.append(field)
+
+    conn.commit()
+    return {
+        "entity_id": eid,
+        "name": name,
+        "domain": domain,
+        "written": written,
+        "left_unknown": skipped,
+        "live_count": live_count(conn),
+    }

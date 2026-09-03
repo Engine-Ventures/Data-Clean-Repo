@@ -126,8 +126,18 @@ def collect(conn: sqlite3.Connection) -> dict:
 
     companies = []
     for r in conn.execute(
+        # Live population only: a company merged into another is not a separate
+        # company, and a phantom was never one. Without this filter a merge
+        # collapses the funnel views but leaves the merged-away row in the
+        # list, so the count on screen never moves -- which is the one thing
+        # working the review queue is supposed to show.
+        #
+        # The raw extraction count is still reported as totals.rawEntities, so
+        # the page can say "498 extracted, 496 after merges" rather than
+        # quietly redefining what 498 meant.
         "SELECT entity_id, canonical_name, domain, is_phantom, phantom_reason, merged_into "
-        "FROM entity ORDER BY canonical_name COLLATE NOCASE"
+        "FROM entity WHERE merged_into IS NULL AND is_phantom = 0 "
+        "ORDER BY canonical_name COLLATE NOCASE"
     ):
         eid = int(r["entity_id"])
         f = funnel.get(eid, {})
@@ -203,6 +213,19 @@ def collect(conn: sqlite3.Connection) -> dict:
         "reconciliation": reconciliation(conn),
         "totals": {
             "entities": len(companies),
+            "rawEntities": int(
+                conn.execute("SELECT COUNT(*) FROM entity").fetchone()[0]
+            ),
+            "mergedAway": int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM entity WHERE merged_into IS NOT NULL"
+                ).fetchone()[0]
+            ),
+            "phantoms": int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM entity WHERE is_phantom = 1"
+                ).fetchone()[0]
+            ),
             "observations": int(
                 conn.execute("SELECT COUNT(*) FROM slide_observation").fetchone()[0]
             ),

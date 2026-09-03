@@ -574,6 +574,212 @@ button {
 
 .queue-item:last-child { border-bottom: none; }
 
+/* ---- intake form ----------------------------------------------------
+   The distinctive move: a source selector on every row. Elsewhere provenance
+   is something you read; here it is something you must supply, because this
+   is the one place a value enters the record without a slide behind it. */
+
+#intake { max-width: 760px; }
+
+.fr {
+  display: grid;
+  grid-template-columns: 132px 1fr auto;
+  gap: 4px 14px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.fl {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--graphite);
+}
+
+/* The hint sits under the input, in the input's column, so it reads as a note
+   about that field rather than as body copy. */
+.fh {
+  grid-column: 2 / -1;
+  font-size: 11px;
+  color: var(--graphite);
+  max-width: 56ch;
+  line-height: 1.45;
+}
+
+.fr input, .fr select {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+  color: var(--ink);
+  width: 100%;
+  min-width: 0;
+}
+
+.fr input:focus-visible, .fr select:focus-visible { border-color: var(--focus); }
+
+.intake-req { border-bottom: 2px solid var(--ink); margin-bottom: 4px; }
+.intake-req .fr:last-child { border-bottom: none; }
+
+.intake-head {
+  display: grid;
+  grid-template-columns: 132px 1fr auto;
+  gap: 14px;
+  padding: 16px 0 6px;
+}
+
+.src-head { text-align: right; }
+
+/* The source selector. Three words, not icons: "affinity" and "public" are
+   different kinds of claim and abbreviating them would hide that. */
+.srcs { display: flex; gap: 3px; }
+
+.src-opt {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  padding: 3px 7px;
+  border: 1px solid var(--hairline);
+  background: none;
+  color: var(--graphite);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.src-opt:hover { color: var(--ink); border-color: var(--graphite); }
+
+.src-opt[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* A row with nothing typed in it has nothing to attribute, so its selector
+   recedes rather than sitting there asking to be answered. */
+.fr.empty .srcs { opacity: 0.35; }
+.fr.empty:focus-within .srcs { opacity: 1; }
+
+/* Zero is a value, not an absence -- Affinity's 0.0 round sizes were read as
+   unknown, and that is the mistake this checkbox exists to prevent. */
+.zero {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--graphite);
+  white-space: nowrap;
+  margin-top: 4px;
+}
+
+.zero input { width: auto; }
+
+.money { display: flex; align-items: center; gap: 6px; }
+.money .unit {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--graphite);
+}
+
+.cite { border-bottom: none; padding-top: 12px; }
+
+.intake-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 18px;
+  border-top: 2px solid var(--ink);
+  margin-top: 8px;
+}
+
+.btn-primary {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 12px;
+  padding: 8px 18px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  white-space: nowrap;
+}
+
+.btn-primary:hover { background: var(--plate); color: var(--ink); }
+.intake-foot .fh { grid-column: auto; max-width: 46ch; }
+
+@media (max-width: 620px) {
+  .fr, .intake-head { grid-template-columns: 1fr; }
+  .src-head { text-align: left; }
+  .fh { grid-column: 1; }
+}
+
+/* ---- decisions -------------------------------------------------------
+   The buttons only exist when the page is served by evpipeline.server; the
+   static build hides them, because a file:// page has nothing to POST to. */
+
+.queue-item[data-review] { cursor: default; }
+
+/* The selected row is what j/k moves and what a/r/d acts on, so it has to be
+   unmistakable without being loud enough to fight the queue's own density. */
+.queue-item.sel {
+  background: var(--plate-sunk);
+  box-shadow: inset 3px 0 0 var(--focus);
+}
+
+.acts {
+  display: flex;
+  gap: 4px;
+  align-items: start;
+  margin-left: auto;
+  padding-left: 10px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+/* Visible on hover, on the selected row, and whenever a button inside has
+   focus -- that last one is what keeps the queue keyboard-navigable. */
+.queue-item:hover .acts,
+.queue-item.sel .acts,
+.acts:focus-within { opacity: 1; }
+
+.act {
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 10px;
+  padding: 2px 7px;
+  border: 1px solid var(--hairline);
+  background: var(--plate);
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.act:hover { border-color: var(--ink); }
+
+.act[data-act="accept"]:hover { border-color: var(--s7); color: var(--s7); }
+.act[data-act="reject"]:hover { border-color: var(--graphite); color: var(--graphite); }
+
+#act-status {
+  min-height: 18px;
+  margin-bottom: 8px;
+  font-family: "Spline Sans Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--graphite);
+}
+
+#act-status.err {
+  color: var(--s7);
+  font-weight: 600;
+}
+
+#act-status code {
+  font-family: inherit;
+  background: var(--plate-sunk);
+  padding: 1px 4px;
+}
+
+/* The queue rows grew a third column for the buttons. */
+.queue-item { grid-template-columns: 34px 1fr auto; }
+
 .conf {
   font-family: "Spline Sans Mono", ui-monospace, monospace;
   font-size: 10px;
@@ -1318,6 +1524,8 @@ button {
               aria-controls="panel-review">Review queue <span class="n" id="tabn-review"></span></button>
       <button class="tab" role="tab" data-tab="worklist" id="tab-worklist"
               aria-controls="panel-worklist">Enrichment <span class="n" id="tabn-worklist"></span></button>
+      <button class="tab" role="tab" data-tab="add" id="tab-add"
+              aria-controls="panel-add">Add a company</button>
     </nav>
   </header>
 
@@ -1537,10 +1745,65 @@ button {
         </p>
       </div>
     </div>
-    <div id="queue"></div>
+    <div id="act-status" role="status" aria-live="polite"></div>
+      <div id="queue"></div>
   </section>
 
   <!-- ================================================================ worklist -->
+  <!-- ===================================================== intake -->
+  <section class="panel section" id="panel-add" role="tabpanel"
+           aria-labelledby="tab-add" tabindex="-1" hidden>
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">For a company the slides never carried</span>
+        <h2>Add a company</h2>
+        <p>
+          Almost every company here arrived from a slide. This is the way in for
+          one that did not &mdash; a NewCo, a Fellows spinout, an introduction
+          that has not reached a Monday deck yet. Every value you record keeps
+          the source you took it from, because a fact with no source is the one
+          thing this record cannot hold.
+        </p>
+      </div>
+    </div>
+
+    <form id="intake" autocomplete="off">
+      <div class="intake-req">
+        <label class="fr">
+          <span class="fl">Company name</span>
+          <input name="name" required placeholder="Acme Fusion">
+        </label>
+        <label class="fr">
+          <span class="fl">Domain</span>
+          <input name="domain" required placeholder="acmefusion.com">
+          <span class="fh">The match key. Names fragment across slides; domains
+            do not, so this is what keeps the company one company.</span>
+        </label>
+      </div>
+
+      <div class="intake-head">
+        <span class="fl">What you know</span>
+        <span class="fl src-head">Where it came from</span>
+      </div>
+
+      <div id="intake-fields"></div>
+
+      <label class="fr cite" id="cite-row" hidden>
+        <span class="fl">Citation</span>
+        <input name="citation" placeholder="https://…">
+        <span class="fh">Required for anything marked <b>public</b>: a claim off
+          the open web is only worth what its source is.</span>
+      </label>
+
+      <div class="intake-foot">
+        <button type="submit" class="btn-primary">Add company</button>
+        <span class="fh">Leave a field blank if you do not know it. Blank is
+          recorded as unknown, which is different from zero and different from
+          &ldquo;checked, genuinely unavailable&rdquo;.</span>
+      </div>
+    </form>
+  </section>
+
   <section class="panel section" id="panel-worklist" role="tabpanel"
            aria-labelledby="tab-worklist" tabindex="-1">
     <div class="section-head">
@@ -1577,7 +1840,19 @@ button {
 <script>
 "use strict";
 
-const DATA = JSON.parse(document.getElementById("payload").textContent);
+// The page works two ways from one file.
+//
+//   served by evpipeline.server -> the placeholder is still a placeholder, so
+//     the data is fetched from /api/state and the decision buttons are live.
+//   built by scripts/build_ui.py -> the payload was substituted, so the data
+//     is inlined and the buttons are hidden, because a static file has
+//     nothing to POST to.
+//
+// One file rather than two means the served app and the static build can
+// never drift apart.
+const RAW_PAYLOAD = document.getElementById("payload").textContent;
+const IS_STATIC = !RAW_PAYLOAD.includes("__PIPELINE_DATA__");
+let DATA = IS_STATIC ? JSON.parse(RAW_PAYLOAD) : null;
 
 const STAGE_SHORT = {
   4: "Prelim Diligence",
@@ -1594,10 +1869,36 @@ const FIELD_LABEL = {
   owner_name: "owner",
 };
 
-const byId = new Map(DATA.companies.map(c => [c.id, c]));
-const weeks = DATA.meetings;
-const heldCount = DATA.totals.meetingsHeld;
-const STAGE_IDS = DATA.stages.map(s => s.id);
+// Rebuilt after every write, so these cannot be const any more: a merge
+// changes the company list and the meeting-derived counts.
+let byId = new Map();
+let weeks = [];
+let heldCount = 0;
+
+function rebuildIndexes() {
+  // Everything derived from DATA is rebuilt here, and nothing reads DATA at
+  // module scope. That is not tidiness: when the page is served it starts with
+  // DATA === null and fetches, so a module-scope read throws before boot() can
+  // populate it -- and after a merge the derived facts are stale anyway.
+  STAGE_IDS = DATA.stages.map(s => s.id);
+  byId = new Map(DATA.companies.map(c => [c.id, c]));
+  weeks = DATA.meetings;
+  heldCount = DATA.totals.meetingsHeld;
+  deriveCompanyFacts();
+}
+
+// Re-render everything that reads DATA. Blunt, but the payload is ~200 KB and
+// a decision is a human-speed event -- a targeted diff would be more code and
+// another way for the page to disagree with the database.
+function renderAll() {
+  renderVitals(); renderCatbar(); renderCompanies(); renderDrive();
+  renderFunnel(); renderAttention(); renderMix(); renderNew();
+  renderCoverage(); renderDwell(); renderRecon();
+  renderViews(); renderLegend(); renderQueue(); renderWorklist();
+  renderIntake();
+  if (activePanel === "trends") renderTrace();
+}
+let STAGE_IDS = [];
 
 function pct(n, d) { return d ? Math.round((n / d) * 100) + "%" : "--"; }
 function esc(s) {
@@ -1615,25 +1916,27 @@ function esc(s) {
    charts cannot disagree with each other.
    ========================================================================== */
 
-DATA.companies.forEach(c => {
-  const perWeek = new Map();
-  c.obs.forEach(([wi, stage, bold, page]) => {
-    const cur = perWeek.get(wi);
-    if (!cur) perWeek.set(wi, { stage, bold, page, n: 1 });
-    else {
-      cur.n += 1;
-      cur.bold = cur.bold || bold;
-      if (stage > cur.stage) { cur.stage = stage; cur.page = page; }
-    }
+function deriveCompanyFacts() {
+  DATA.companies.forEach(c => {
+    const perWeek = new Map();
+    c.obs.forEach(([wi, stage, bold, page]) => {
+      const cur = perWeek.get(wi);
+      if (!cur) perWeek.set(wi, { stage, bold, page, n: 1 });
+      else {
+        cur.n += 1;
+        cur.bold = cur.bold || bold;
+        if (stage > cur.stage) { cur.stage = stage; cur.page = page; }
+      }
+    });
+    c._perWeek = perWeek;
+    c._ever = new Set(c.obs.map(o => o[1]));
+    // latest = the collapsed stage at the most recent meeting the company was on.
+    // build_ui.py emits it too; recomputing keeps older payloads working.
+    const lastWi = c.obs.length ? Math.max(...c.obs.map(o => o[0])) : null;
+    c._latest = c.latest != null ? c.latest
+              : lastWi == null ? null : perWeek.get(lastWi).stage;
   });
-  c._perWeek = perWeek;
-  c._ever = new Set(c.obs.map(o => o[1]));
-  // latest = the collapsed stage at the most recent meeting the company was on.
-  // build_ui.py emits it too; recomputing keeps older payloads working.
-  const lastWi = c.obs.length ? Math.max(...c.obs.map(o => o[0])) : null;
-  c._latest = c.latest != null ? c.latest
-            : lastWi == null ? null : perWeek.get(lastWi).stage;
-});
+}
 
 /* ------------------------------------------------------------------ masthead */
 
@@ -1641,7 +1944,13 @@ function renderVitals() {
   const cov = DATA.coverage;
   const t = DATA.totals;
   const vitals = [
-    { v: t.entities, d: "diligence cohort", label: "Companies screened" },
+    // The live count against the raw extraction, so working the queue is
+    // visible: 498 rows came out of the slides, this is what is left after
+    // merges and phantoms. Falling is the point.
+    { v: t.entities,
+      d: t.rawEntities && t.rawEntities !== t.entities
+           ? `of ${t.rawEntities} extracted` : "companies",
+      label: "Companies", flag: false },
     { v: DATA.funnel.obs_prelim, d: "of " + t.entities, label: "Seen in prelim dil" },
     { v: DATA.funnel.reached_deep, d: "of " + t.entities, label: "Reached deep dil" },
     { v: DATA.funnel.reached_legal, d: "of " + t.entities, label: "Reached legal", flag: true },
@@ -1672,7 +1981,7 @@ function renderVitals() {
    Tab routing. The hash carries section and category so a view is linkable.
    ========================================================================== */
 
-const PANELS = ["pipeline", "drive", "trends", "review", "worklist"];
+const PANELS = ["pipeline", "drive", "trends", "review", "worklist", "add"];
 let activePanel = "pipeline";
 
 function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
@@ -1686,6 +1995,7 @@ function showPanel(name, push) {
     t.tabIndex = p === activePanel ? 0 : -1;
   });
   if (activePanel === "trends") renderTrace();   // needs layout to size
+  if (activePanel === "add") { renderIntake(); syncIntake(); }
   if (push !== false) writeHash();
 }
 
@@ -1725,10 +2035,17 @@ const BASES = {
   },
   ever: {
     label: "ever in category",
-    def: `<b>Ever in category</b> — the company was listed under this category
-          on at least one slide. A company appears under every category it
-          passed through, so the counts sum to more than ${DATA.totals.entities}.
-          These are the numbers the brief quotes (15 deep diligence, 6 legal).`,
+    // A getter, not a value: this string interpolates DATA, and BASES is
+    // built at module scope where DATA is still null when the page is served.
+    // Deferring to first read also means the count stays correct after a
+    // merge changes it. The call site reads `.def` either way.
+    get def() {
+      return `<b>Ever in category</b> — the company was listed under this
+          category on at least one slide. A company appears under every
+          category it passed through, so the counts sum to more than
+          ${DATA.totals.entities}. These are the numbers the brief quotes
+          (15 deep diligence, 6 legal).`;
+    },
     test: (c, s) => c._ever.has(s),
   },
   furthest: {
@@ -2306,9 +2623,21 @@ function renderQueue() {
              <span class="to">${esc(r.targetName)}</span>
            </span>`
         : `<span class="merge"><span class="to">${esc(r.entityName) || "&mdash;"}</span></span>`;
-      return `<div class="queue-item">
+      // Accept is only offered where it can actually do something. A merge
+      // proposal with no target has no canonical choice yet, so applying it
+      // is not a decision anyone can make from this row.
+      const canAccept = kind !== "merge_proposal" || r.target != null;
+      const acts = IS_STATIC ? "" : `<span class="acts">
+          ${canAccept ? `<button class="act" data-act="accept" title="Accept (a)">accept</button>` : ""}
+          <button class="act" data-act="reject" title="Reject (r)">reject</button>
+          <button class="act" data-act="defer" title="Defer (d)">defer</button>
+        </span>`;
+      return `<div class="queue-item" data-review="${r.id}" data-kind="${esc(kind)}"
+                   data-entity="${r.entity != null ? r.entity : ""}"
+                   data-label="${esc(r.entityName || "")}">
         <span class="conf${high ? " high" : ""}">${r.confidence != null ? r.confidence.toFixed(2) : "&mdash;"}</span>
         <span>${head}<span class="queue-detail">${esc(r.detail)}</span></span>
+        ${acts}
       </div>`;
     }).join("");
     const more = items.length > 120
@@ -2657,26 +2986,326 @@ document.getElementById("search").addEventListener("input", e => {
 
 window.addEventListener("hashchange", readHash);
 
+/* ----------------------------------------------------------- the write path */
+
+// Every decision goes through here so there is exactly one place that talks to
+// the server, one place that reports failure, and one place that refreshes.
+async function act(path, body, describe) {
+  if (IS_STATIC) return null;
+  setStatus("working\u2026");
+  let res, payload;
+  try {
+    res = await fetch(path, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    payload = await res.json();
+  } catch (err) {
+    // The server being down is the common case: the page was left open.
+    setStatus("no server \u2014 start it with <code>python -m evpipeline.server</code>", true);
+    return null;
+  }
+  if (!res.ok) {
+    // A refused write is not a crash. The layer says no to merging into an
+    // already-merged entity, to a phantom with no reason, to a proposal with
+    // no target -- and its message is written to be read, so show it as-is.
+    setStatus(esc(payload.error || `refused (${res.status})`), true);
+    return null;
+  }
+  await reload();
+  setStatus(describe(payload));
+  return payload;
+}
+
+async function reload() {
+  const res = await fetch("/api/state", {cache: "no-store"});
+  DATA = await res.json();
+  rebuildIndexes();
+  renderAll();
+}
+
+function setStatus(html, isError) {
+  const el = document.getElementById("act-status");
+  if (!el) return;
+  el.innerHTML = html;
+  el.classList.toggle("err", !!isError);
+  clearTimeout(setStatus._t);
+  if (!isError) setStatus._t = setTimeout(() => { el.innerHTML = ""; }, 6000);
+}
+
+/* --------------------------------------------------------------- decisions */
+
+function selectedItem() {
+  const el = document.querySelector(".queue-item.sel");
+  return el ? {
+    review: Number(el.dataset.review),
+    kind: el.dataset.kind,
+    entity: el.dataset.entity ? Number(el.dataset.entity) : null,
+    label: el.dataset.label || "",
+  } : null;
+}
+
+function selectQueueItem(el) {
+  document.querySelectorAll(".queue-item.sel").forEach(x => x.classList.remove("sel"));
+  if (!el) return;
+  el.classList.add("sel");
+  el.scrollIntoView({block: "nearest"});
+}
+
+function moveSelection(delta) {
+  const items = [...document.querySelectorAll(".queue-item[data-review]")];
+  if (!items.length) return;
+  const cur = items.findIndex(el => el.classList.contains("sel"));
+  const next = cur < 0 ? 0 : Math.min(items.length - 1, Math.max(0, cur + delta));
+  selectQueueItem(items[next]);
+}
+
+// Accept means different things per kind, which is why the queue is grouped by
+// kind in the first place. Only merge proposals can be applied automatically:
+// the pair is already oriented at the fuller spelling by ingest.
+async function acceptSelected() {
+  const it = selectedItem();
+  if (!it) return;
+  if (it.kind === "merge_proposal") {
+    await act("/api/review/accept", {review_id: it.review},
+      p => `merged <b>${esc(p.merged)}</b> into <b>${esc(p.into)}</b>`
+         + (p.aliases_moved && p.aliases_moved.length
+              ? ` \u00b7 ${p.aliases_moved.length} alias(es) moved` : "")
+         + ` \u00b7 <b>${p.live_count}</b> companies`);
+    return;
+  }
+  if (it.kind === "line_wrap_candidate") {
+    await act("/api/phantom",
+      {entity_id: it.entity, reason: "confirmed not a company from the review queue"},
+      p => `flagged <b>${esc(p.phantom)}</b> as not a company \u00b7 <b>${p.live_count}</b> companies`);
+    await act("/api/review/resolve", {review_id: it.review, state: "accepted"}, () => "");
+    return;
+  }
+  // stage_jump, stage_regression, duplicate_listing, group_split: accepting is
+  // acknowledging the observation, which changes no data.
+  await act("/api/review/resolve",
+    {review_id: it.review, state: "accepted", note: "acknowledged"},
+    p => `item ${p.review_id} acknowledged \u00b7 <b>${p.open_items}</b> left to review`);
+}
+
+async function rejectSelected() {
+  const it = selectedItem();
+  if (!it) return;
+  await act("/api/review/resolve",
+    {review_id: it.review, state: "rejected", note: "rejected from the review queue"},
+    p => `item ${p.review_id} rejected \u00b7 <b>${p.open_items}</b> left to review`);
+}
+
+async function deferSelected() {
+  const it = selectedItem();
+  if (!it) return;
+  await act("/api/review/resolve",
+    {review_id: it.review, state: "deferred", note: "deferred from the review queue"},
+    p => `item ${p.review_id} deferred \u00b7 <b>${p.open_items}</b> left to review`);
+}
+
+document.addEventListener("click", e => {
+  const row = e.target.closest(".queue-item[data-review]");
+  if (row && !e.target.closest(".act")) selectQueueItem(row);
+  const btn = e.target.closest(".act");
+  if (!btn) return;
+  selectQueueItem(btn.closest(".queue-item"));
+  ({accept: acceptSelected, reject: rejectSelected, defer: deferSelected})[btn.dataset.act]();
+});
+
+// Keyboard first: 103 merge proposals is the workload, and mouse round-trips
+// are what stops a queue that size from actually getting worked.
+document.addEventListener("keydown", e => {
+  if (IS_STATIC) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if (document.getElementById("drawer")?.classList.contains("open")) return;
+  const map = {j: () => moveSelection(1), k: () => moveSelection(-1),
+               a: acceptSelected, r: rejectSelected, d: deferSelected};
+  if (map[e.key]) { e.preventDefault(); map[e.key](); }
+});
+
+/* ------------------------------------------------------------------ intake */
+
+// The fields the form offers, mirroring what the tables and the detail drawer
+// already show, plus the two the record has never held: how the company was
+// sourced, and a description in the team's own words.
+//
+// `pick` names a locked picklist fetched from the database rather than copied
+// here, so a dropdown option can never be something validate.py will reject.
+const INTAKE = [
+  {f: "hq_country",     label: "Origin",         ph: "United States",  dflt: "Public"},
+  {f: "stage",          label: "Round stage",    pick: "round_stage",  dflt: "Affinity"},
+  {f: "round_size_usd", label: "Round size",     money: true,          dflt: "Affinity"},
+  {f: "website",        label: "Website",        ph: "https://…",      dflt: "Public"},
+  {f: "source_channel", label: "How we met",     ph: "Warm intro, conference, lab spinout…", dflt: "Manual"},
+  {f: "owner_name",     label: "Owner",          ph: "who runs it here", dflt: "Affinity"},
+  {f: "last_meeting",   label: "Last discussed", date: true,           dflt: "Affinity"},
+  {f: "affinity_status",label: "Status",         pick: "affinity_status", dflt: "Affinity"},
+  {f: "working_group",  label: "Working group",  pick: "working_group", dflt: "Affinity"},
+  {f: "description",    label: "In one line",    ph: "what they actually do", dflt: "Manual"},
+];
+
+// Slides is offered but never the default: a company reaching this form is one
+// the slides do not carry, so claiming a slide as the source would be a lie in
+// the ordinary case. It stays available for a deck that predates the window.
+const SOURCES = ["Slides", "Affinity", "Public"];
+
+let VOCAB = {};
+
+async function renderIntake() {
+  if (IS_STATIC) {
+    document.getElementById("panel-add").innerHTML =
+      '<div class="section-head"><div><h2>Add a company</h2>'
+      + '<p>Adding a company writes to the database, so it needs the live '
+      + 'workbench rather than this snapshot. Run '
+      + '<code>python scripts/serve.py</code> and open the served page.</p>'
+      + '</div></div>';
+    return;
+  }
+  if (!Object.keys(VOCAB).length) {
+    try {
+      VOCAB = await (await fetch("/api/vocab", {method: "POST",
+        headers: {"Content-Type": "application/json"}, body: "{}"})).json();
+    } catch (err) { VOCAB = {}; }
+  }
+
+  document.getElementById("intake-fields").innerHTML = INTAKE.map(d => {
+    let input;
+    if (d.pick) {
+      const opts = (VOCAB[d.pick] || []).map(o => `<option>${esc(o)}</option>`).join("");
+      input = `<select name="${d.f}"><option value=""></option>${opts}</select>`;
+    } else if (d.money) {
+      input = `<span class="money">
+          <span class="unit">$</span>
+          <input name="${d.f}" type="number" step="0.1" min="0" placeholder="4.5">
+          <span class="unit">million</span>
+        </span>
+        <label class="zero"><input type="checkbox" name="${d.f}__zero">
+          genuinely zero, not unknown</label>`;
+    } else if (d.date) {
+      input = `<input name="${d.f}" type="date">`;
+    } else {
+      input = `<input name="${d.f}" placeholder="${esc(d.ph || "")}">`;
+    }
+    const srcs = SOURCES.map(sc =>
+      `<button type="button" class="src-opt" data-src="${d.f}" data-val="${sc}"
+               aria-pressed="${sc === d.dflt}">${sc.toLowerCase()}</button>`).join("");
+    return `<label class="fr empty" data-row="${d.f}">
+        <span class="fl">${esc(d.label)}</span>
+        <span>${input}</span>
+        <span class="srcs">${srcs}</span>
+      </label>`;
+  }).join("");
+}
+
+// A source selector is a set of three, one of which is on. Radio semantics
+// with buttons, because a native radio group cannot be styled to read as a
+// row of words without more markup than it is worth.
+document.addEventListener("click", e => {
+  const opt = e.target.closest(".src-opt");
+  if (!opt) return;
+  document.querySelectorAll(`.src-opt[data-src="${opt.dataset.src}"]`)
+    .forEach(o => o.setAttribute("aria-pressed", String(o === opt)));
+  syncIntake();
+});
+
+// Two things stay in step with what has actually been typed: rows with no
+// value keep their selector quiet, and the citation field only appears once
+// something is attributed to the open web.
+function syncIntake() {
+  const form = document.getElementById("intake");
+  if (!form) return;
+  let needsCite = false;
+  INTAKE.forEach(d => {
+    const row = form.querySelector(`[data-row="${d.f}"]`);
+    if (!row) return;
+    const el = form.elements[d.f];
+    const zero = form.elements[d.f + "__zero"];
+    const filled = (el && String(el.value).trim() !== "") || (zero && zero.checked);
+    row.classList.toggle("empty", !filled);
+    const chosen = row.querySelector('.src-opt[aria-pressed="true"]');
+    if (filled && chosen && chosen.dataset.val === "Public") needsCite = true;
+  });
+  document.getElementById("cite-row").hidden = !needsCite;
+}
+
+document.addEventListener("input", e => {
+  if (e.target.closest("#intake")) syncIntake();
+});
+
+document.addEventListener("submit", async e => {
+  const form = e.target.closest("#intake");
+  if (!form) return;
+  e.preventDefault();
+
+  const fields = INTAKE.map(d => {
+    const el = form.elements[d.f];
+    const zero = form.elements[d.f + "__zero"];
+    const row = form.querySelector(`[data-row="${d.f}"]`);
+    const chosen = row?.querySelector('.src-opt[aria-pressed="true"]');
+    return {
+      field: d.f,
+      value: el ? el.value : "",
+      is_zero: !!(zero && zero.checked),
+      source: chosen ? chosen.dataset.val : "Manual",
+      citation: form.elements.citation ? form.elements.citation.value : "",
+    };
+  }).filter(x => String(x.value).trim() !== "" || x.is_zero);
+
+  const out = await act("/api/entity", {
+    name: form.elements.name.value,
+    domain: form.elements.domain.value,
+    fields,
+  }, p => {
+    const n = p.written.length;
+    const unknown = p.left_unknown.length;
+    return `added <b>${esc(p.name)}</b> \u00b7 ${n} field${n === 1 ? "" : "s"} recorded`
+         + (unknown ? ` \u00b7 ${unknown} left unknown` : "")
+         + ` \u00b7 <b>${p.live_count}</b> companies`;
+  });
+
+  if (out) {
+    form.reset();
+    renderIntake();
+    syncIntake();
+  }
+});
+
 /* --------------------------------------------------------------------- go */
 
-renderVitals();
-renderCatbar();
-renderCompanies();
-renderDrive();
-renderFunnel();
-renderAttention();
-renderMix();
-renderNew();
-renderCoverage();
-renderDwell();
-renderRecon();
-renderViews();
-renderLegend();
-renderQueue();
-renderWorklist();
-showPanel("pipeline", false);
-readHash();
-if (activePanel === "pipeline") { renderCatbar(); renderCompanies(); }
+async function boot() {
+  if (!IS_STATIC) {
+    try {
+      const res = await fetch("/api/state", {cache: "no-store"});
+      DATA = await res.json();
+    } catch (err) {
+      document.body.innerHTML =
+        '<div style="padding:40px;font:14px/1.6 system-ui;max-width:60ch">'
+        + '<h1 style="font-size:20px">No server</h1>'
+        + '<p>This page is the live workbench and needs the local server:</p>'
+        + '<pre style="background:#0002;padding:10px">python -m evpipeline.server</pre>'
+        + '<p>For a read-only snapshot that opens straight from disk, run '
+        + '<code>python scripts/build_ui.py</code> and open '
+        + '<code>ui/index.html</code> instead.</p></div>';
+      return;
+    }
+  }
+  rebuildIndexes();
+  renderAll();
+  showPanel("pipeline", false);
+  readHash();
+  if (activePanel === "pipeline") { renderCatbar(); renderCompanies(); }
+  if (!IS_STATIC) {
+    moveSelection(1);   // put the keyboard somewhere useful immediately
+    setStatus("<b>j</b>/<b>k</b> to move \u00b7 <b>a</b>ccept \u00b7 "
+            + "<b>r</b>eject \u00b7 <b>d</b>efer");
+  }
+}
+
+boot();
 </script>
 </body>
 </html>
