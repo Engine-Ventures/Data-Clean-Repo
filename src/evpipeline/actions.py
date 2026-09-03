@@ -60,6 +60,7 @@ def merge_entities(
     dst_id: int,
     user: str,
     note: str = "",
+    review_id: int | None = None,
 ) -> dict:
     """Merge `src` into `dst`. Returns what changed.
 
@@ -70,6 +71,16 @@ def merge_entities(
     Aliases move to `dst`, because the point of the alias table is that every
     spelling ever seen on a slide resolves to the live company. After the merge
     `src`'s own name is one of those spellings.
+
+    `review_id` is the queued proposal this merge is closing, when there is
+    one — the ordinary path, since `accept_merge_proposal` is what calls this.
+    Passing it means this function *updates that row* to accepted rather than
+    inserting a second one, which is what happened before: every accepted
+    merge left two review_item rows, the original proposal and a fresh
+    "applied via the review queue" record describing the same event. Leave it
+    None for a merge with no proposal behind it — two companies a person
+    noticed are duplicates before ingest ever proposed it — which still needs
+    its own audit row inserted from scratch.
     """
     src, dst = _entity(conn, src_id), _entity(conn, dst_id)
 
@@ -102,19 +113,21 @@ def merge_entities(
     conn.execute(
         "UPDATE entity SET merged_into = ? WHERE entity_id = ?", (dst_id, src_id)
     )
-    conn.execute(
-        "INSERT INTO review_item (kind, entity_id, target_id, detail, proposed_by, "
-        "state, resolved_by, resolved_at, resolution_note) "
-        "VALUES ('merge_proposal', ?, ?, ?, ?, 'accepted', ?, datetime('now'), ?)",
-        (
-            src_id,
-            dst_id,
-            f"merged {src['canonical_name']!r} into {dst['canonical_name']!r}",
-            user,
-            user,
-            note or "applied via the review queue",
-        ),
-    )
+
+    detail = f"merged {src['canonical_name']!r} into {dst['canonical_name']!r}"
+    if review_id is not None:
+        conn.execute(
+            "UPDATE review_item SET state = 'accepted', resolved_by = ?, "
+            "resolved_at = datetime('now'), resolution_note = ? WHERE review_id = ?",
+            (user, note or detail, review_id),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO review_item (kind, entity_id, target_id, detail, proposed_by, "
+            "state, resolved_by, resolved_at, resolution_note) "
+            "VALUES ('merge_proposal', ?, ?, ?, ?, 'accepted', ?, datetime('now'), ?)",
+            (src_id, dst_id, detail, user, user, note or "applied outside the review queue"),
+        )
     conn.commit()
     return {
         "merged": src["canonical_name"],
@@ -248,16 +261,13 @@ def accept_merge_proposal(conn: sqlite3.Connection, review_id: int, user: str) -
             f"choice before it can be applied"
         )
 
+    # review_id=review_id: merge_entities closes this exact row rather than
+    # inserting a second one alongside it, which is what left review_item at
+    # 297 instead of 293 after four accepted merges.
     result = merge_entities(
         conn, int(row["entity_id"]), int(row["target_id"]), user,
-        note=f"accepted review item {review_id}",
+        note="merge applied", review_id=review_id,
     )
-    conn.execute(
-        "UPDATE review_item SET state = 'accepted', resolved_by = ?, "
-        "resolved_at = datetime('now'), resolution_note = ? WHERE review_id = ?",
-        (user, "merge applied", review_id),
-    )
-    conn.commit()
     result["review_id"] = review_id
     result["open_items"] = int(
         conn.execute("SELECT COUNT(*) FROM review_item WHERE state = 'open'").fetchone()[0]
