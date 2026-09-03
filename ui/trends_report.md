@@ -74,7 +74,7 @@ _Re-derived from the observation series, not read from `v_stage_transition` and 
 - Average gap: **17 days** (median 7, range 6 to 112)
 - The other 170 of 185 cohort companies (92%) were never seen at more than one stage, so they contribute no transition.
 
-**Longest current dwell** — days since the last slide appearance, for companies whose latest stage has not changed since they entered it. Today is 2026-09-03; the series ends 2026-08-31.
+**Stalled — needs attention before Monday.** These ten have gone longest without appearing on a slide, and have not moved stage since they entered the one they are in. Each is a live diligence deal that nobody has reported on; the action is to either advance it, pass on it, or say why it is still open. Today is 2026-09-03; the series ends 2026-08-31, so 3 days of the count below is simply the gap since the last meeting.
 
 | Company | Stage | Entered | Last seen | Days since last seen | Meetings at stage |
 | --- | --- | --- | --- | --- | --- |
@@ -169,6 +169,306 @@ Row denominator is that thesis area's own count, so the percentages answer "how 
 Cohort baseline for comparison: 16 of 185 cohort companies (9%) reached Deep Diligence or beyond. An area above that line is running deeper than the cohort average.
 
 The 3 companies with no thesis area are excluded from the cross-tab, not bucketed as unknown.
+
+## A. Advancement splits
+
+Every distribution below is cut two ways: **Deep+** — reached Deep Diligence or further, `furthest_stage_id >= 5`, 16 companies — against **Prelim-only** — `furthest_stage_id == 4`, 169 companies. Both are `reached_*` semantics. The two groups' coverage rates are computed and reported separately; neither is applied to the other.
+
+### A1. Region (`hq_region`)
+
+> **Read the Deep+ percentages with care.** That group is 16 companies against 169 at Preliminary Diligence only. At n=16, one company moves a share by 6%, so a gap between the two columns is not a signal on its own. The counts are exact; the percentages are fragile.
+
+Coverage is reported per group, not pooled: **Deep+ 13 of 16 Deep+ companies (81%)**, **Prelim-only 61 of 169 Prelim-only companies (36%)**.
+
+| Region | Deep+ (n=16) | share of Deep+ with a value | Prelim-only (n=169) | share of Prelim-only with a value |
+| --- | --- | --- | --- | --- |
+| International | 2 | 15% | 20 | 33% |
+| United States | 11 | 85% | 41 | 67% |
+| _no value_ | 3 | — | 108 | — |
+
+### A2. Country (`hq_country`)
+
+> **Read the Deep+ percentages with care.** That group is 16 companies against 169 at Preliminary Diligence only. At n=16, one company moves a share by 6%, so a gap between the two columns is not a signal on its own. The counts are exact; the percentages are fragile.
+
+Coverage is reported per group, not pooled: **Deep+ 13 of 16 Deep+ companies (81%)**, **Prelim-only 61 of 169 Prelim-only companies (36%)**.
+
+| Country | Deep+ (n=16) | share of Deep+ with a value | Prelim-only (n=169) | share of Prelim-only with a value |
+| --- | --- | --- | --- | --- |
+| Australia | 0 | 0% | 1 | 2% |
+| Austria | 0 | 0% | 1 | 2% |
+| Canada | 0 | 0% | 1 | 2% |
+| France | 0 | 0% | 1 | 2% |
+| Germany | 0 | 0% | 2 | 3% |
+| Israel | 0 | 0% | 1 | 2% |
+| Portugal | 0 | 0% | 1 | 2% |
+| United Kingdom | 2 | 15% | 12 | 20% |
+| United States | 11 | 85% | 41 | 67% |
+| _no value_ | 3 | — | 108 | — |
+
+### A3. Round stage (`stage`)
+
+> **Still not `funding_round.round_stage`.** As in section 5, this is the `stage` field_value — Affinity's current round — because `funding_round` lives only in `data/pipeline.db`, which still cannot be built. Do not read this as a funding_round split.
+
+> **Read the Deep+ percentages with care.** That group is 16 companies against 169 at Preliminary Diligence only. At n=16, one company moves a share by 6%, so a gap between the two columns is not a signal on its own. The counts are exact; the percentages are fragile.
+
+Coverage is reported per group, not pooled: **Deep+ 13 of 16 Deep+ companies (81%)**, **Prelim-only 92 of 169 Prelim-only companies (54%)**.
+
+| Round | Deep+ (n=16) | share of Deep+ with a value | Prelim-only (n=169) | share of Prelim-only with a value |
+| --- | --- | --- | --- | --- |
+| Preseed | 0 | 0% | 13 | 14% |
+| Seed | 9 | 69% | 57 | 62% |
+| Series A | 4 | 31% | 18 | 20% |
+| Series B | 0 | 0% | 4 | 4% |
+| _no value_ | 3 | — | 77 | — |
+
+
+## B. Internal signal vs advancement
+
+Do the team's own scores and Affinity's Interest flag track with getting deeper? Same Deep+ / Prelim-only split as section A. This is a two-group comparison to read in a room, **not** a regression: no correlation coefficient is computed and no significance is claimed. At these coverage levels none of it would survive one anyway.
+
+### B1. Interest (`interest`)
+
+> **Read the Deep+ percentages with care.** That group is 16 companies against 169 at Preliminary Diligence only. At n=16, one company moves a share by 6%, so a gap between the two columns is not a signal on its own. The counts are exact; the percentages are fragile.
+
+Coverage is reported per group, not pooled: **Deep+ 9 of 16 Deep+ companies (56%)**, **Prelim-only 82 of 169 Prelim-only companies (49%)**.
+
+| Interest | Deep+ (n=16) | share of Deep+ with a value | Prelim-only (n=169) | share of Prelim-only with a value |
+| --- | --- | --- | --- | --- |
+| 1. Very High | 9 | 100% | 3 | 4% |
+| 2. High | 0 | 0% | 27 | 33% |
+| 3. Moderate | 0 | 0% | 26 | 32% |
+| 4. Low | 0 | 0% | 11 | 13% |
+| 5. Propose Pass | 0 | 0% | 15 | 18% |
+| _no value_ | 7 | — | 87 | — |
+
+### B2. Team score (`score_team`)
+
+> **Read the Deep+ percentages with care.** That group is 16 companies against 169 at Preliminary Diligence only. At n=16, one company moves a share by 6%, so a gap between the two columns is not a signal on its own. The counts are exact; the percentages are fragile.
+
+> **Coverage is 5%** — `score_team` is recorded for only 9 of 185 here. The distribution below describes those 9, and cannot be extrapolated to the rest.
+
+Coverage is reported per group, not pooled: **Deep+ 3 of 16 Deep+ companies (19%)**, **Prelim-only 6 of 169 Prelim-only companies (4%)**.
+
+| Team score | Deep+ (n=16) | share of Deep+ with a value | Prelim-only (n=169) | share of Prelim-only with a value |
+| --- | --- | --- | --- | --- |
+| +++ | 2 | 67% | 1 | 17% |
+| ++ | 1 | 33% | 4 | 67% |
+| + | 0 | 0% | 1 | 17% |
+| _no value_ | 13 | — | 163 | — |
+
+### B3. Tech score (`score_tech`)
+
+> **Read the Deep+ percentages with care.** That group is 16 companies against 169 at Preliminary Diligence only. At n=16, one company moves a share by 6%, so a gap between the two columns is not a signal on its own. The counts are exact; the percentages are fragile.
+
+> **Coverage is 6%** — `score_tech` is recorded for only 11 of 185 here. The distribution below describes those 11, and cannot be extrapolated to the rest.
+
+Coverage is reported per group, not pooled: **Deep+ 3 of 16 Deep+ companies (19%)**, **Prelim-only 8 of 169 Prelim-only companies (5%)**.
+
+| Tech score | Deep+ (n=16) | share of Deep+ with a value | Prelim-only (n=169) | share of Prelim-only with a value |
+| --- | --- | --- | --- | --- |
+| +++ | 3 | 100% | 4 | 50% |
+| ++ | 0 | 0% | 4 | 50% |
+| _no value_ | 13 | — | 161 | — |
+
+### B4. Opportunity score (`score_oppt`)
+
+> **Read the Deep+ percentages with care.** That group is 16 companies against 169 at Preliminary Diligence only. At n=16, one company moves a share by 6%, so a gap between the two columns is not a signal on its own. The counts are exact; the percentages are fragile.
+
+> **Coverage is 7%** — `score_oppt` is recorded for only 13 of 185 here. The distribution below describes those 13, and cannot be extrapolated to the rest.
+
+Coverage is reported per group, not pooled: **Deep+ 3 of 16 Deep+ companies (19%)**, **Prelim-only 10 of 169 Prelim-only companies (6%)**.
+
+| Opportunity score | Deep+ (n=16) | share of Deep+ with a value | Prelim-only (n=169) | share of Prelim-only with a value |
+| --- | --- | --- | --- | --- |
+| +++ | 2 | 67% | 5 | 50% |
+| ++ | 1 | 33% | 5 | 50% |
+| _no value_ | 13 | — | 159 | — |
+
+
+## C. Affinity Status vs slide-derived stage
+
+A process-health check, not a data question: Affinity's `Status` is maintained by hand, the slide stage is derived from what was presented. Where they contradict each other, one of the two is out of date. Stage columns are `furthest_stage_id` (`reached_*`).
+
+Coverage: 123 of 185 cohort companies (66%) have an Affinity Status.
+
+| Affinity Status | 4. Preliminary Diligence | 5. Deep Diligence | 6. Negotiate / Offer | 7. Legal Diligence / Def Docs | Total |
+| --- | --- | --- | --- | --- | --- |
+| Pass | 41 | 3 | 0 | 0 | 44 |
+| Preliminary Diligence | 22 | 2 | 0 | 0 | 24 |
+| Initial Evaluation | 24 | 0 | 0 | 0 | 24 |
+| Wait | 13 | 1 | 0 | 0 | 14 |
+| Pre-Screen | 9 | 0 | 0 | 0 | 9 |
+| Invested | 0 | 0 | 0 | 3 | 3 |
+| Loss | 0 | 1 | 0 | 1 | 2 |
+| Sourcing - No Outreach | 2 | 0 | 0 | 0 | 2 |
+| Deep Diligence | 0 | 1 | 0 | 0 | 1 |
+| _no status_ | 58 | 2 | 0 | 2 | 62 |
+
+### C1. Contradictions to resolve
+
+46 cohort companies carry Loss or Pass in Affinity. Most of those are not contradictions — a company that was passed on and has not been presented since is a record working correctly, so listing all 46 as actions would bury the real ones.
+
+**7 need a person.** Either they reached Deep Diligence or beyond *after* being closed, or they were still appearing on slides within 56 days of the last meeting (2026-08-31) — in both cases Affinity says the deal is dead and the slides say it is not.
+
+| Company | Affinity Status | Furthest stage | Last seen | Why flagged |
+| --- | --- | --- | --- | --- |
+| Ovelle | Loss | 7. Legal Diligence / Def Docs | 2026-04-20 | **reached Deep+ after being closed** |
+| Valor | Loss | 5. Deep Diligence | 2025-11-03 | **reached Deep+ after being closed** |
+| DINYA | Pass | 5. Deep Diligence | 2025-11-10 | **reached Deep+ after being closed** |
+| CloverLeaf | Pass | 5. Deep Diligence | 2026-01-12 | **reached Deep+ after being closed** |
+| Attune Neurosci | Pass | 5. Deep Diligence | 2026-03-16 | **reached Deep+ after being closed** |
+| Lobe Labs | Pass | 4. Preliminary Diligence | 2026-07-13 | **still on slides within 56 days of the last meeting** |
+| Blisk Dynamics | Pass | 4. Preliminary Diligence | 2026-08-17 | **still on slides within 56 days of the last meeting** |
+| Emergentia | Pass | 4. Preliminary Diligence | 2025-10-14 | consistent — closed, and quiet since |
+| Flexnode | Pass | 4. Preliminary Diligence | 2025-10-27 | consistent — closed, and quiet since |
+| OceanBit | Pass | 4. Preliminary Diligence | 2025-10-27 | consistent — closed, and quiet since |
+| Nouxel | Pass | 4. Preliminary Diligence | 2025-11-03 | consistent — closed, and quiet since |
+| SceniX | Pass | 4. Preliminary Diligence | 2025-11-03 | consistent — closed, and quiet since |
+| JuliaHub | Pass | 4. Preliminary Diligence | 2025-11-10 | consistent — closed, and quiet since |
+| Mursla Bio | Pass | 4. Preliminary Diligence | 2025-11-10 | consistent — closed, and quiet since |
+| Artisan Insight | Pass | 4. Preliminary Diligence | 2025-12-01 | consistent — closed, and quiet since |
+| Circadian OS | Pass | 4. Preliminary Diligence | 2025-12-08 | consistent — closed, and quiet since |
+| Porpoise Power | Pass | 4. Preliminary Diligence | 2025-12-08 | consistent — closed, and quiet since |
+| MetAI | Pass | 4. Preliminary Diligence | 2026-01-05 | consistent — closed, and quiet since |
+| Merge4Energy | Pass | 4. Preliminary Diligence | 2026-01-26 | consistent — closed, and quiet since |
+| Human Bio | Pass | 4. Preliminary Diligence | 2026-02-02 | consistent — closed, and quiet since |
+| MintNeuro | Pass | 4. Preliminary Diligence | 2026-02-02 | consistent — closed, and quiet since |
+| Exousia | Pass | 4. Preliminary Diligence | 2026-02-17 | consistent — closed, and quiet since |
+| Graph Tx | Pass | 4. Preliminary Diligence | 2026-02-23 | consistent — closed, and quiet since |
+| NeoLogic | Pass | 4. Preliminary Diligence | 2026-02-23 | consistent — closed, and quiet since |
+| PseudolithIC | Pass | 4. Preliminary Diligence | 2026-03-02 | consistent — closed, and quiet since |
+| Q.ANT | Pass | 4. Preliminary Diligence | 2026-03-02 | consistent — closed, and quiet since |
+| Sensorium | Pass | 4. Preliminary Diligence | 2026-03-02 | consistent — closed, and quiet since |
+| Sention | Pass | 4. Preliminary Diligence | 2026-03-02 | consistent — closed, and quiet since |
+| Coformer.ai | Pass | 4. Preliminary Diligence | 2026-03-09 | consistent — closed, and quiet since |
+| Braid Robotics | Pass | 4. Preliminary Diligence | 2026-03-16 | consistent — closed, and quiet since |
+| Level 12 Bio | Pass | 4. Preliminary Diligence | 2026-03-16 | consistent — closed, and quiet since |
+| Oak Robotics | Pass | 4. Preliminary Diligence | 2026-03-16 | consistent — closed, and quiet since |
+| Neurofold | Pass | 4. Preliminary Diligence | 2026-03-23 | consistent — closed, and quiet since |
+| Flume | Pass | 4. Preliminary Diligence | 2026-03-30 | consistent — closed, and quiet since |
+| Fusion Dynamics | Pass | 4. Preliminary Diligence | 2026-03-30 | consistent — closed, and quiet since |
+| Mueon | Pass | 4. Preliminary Diligence | 2026-03-30 | consistent — closed, and quiet since |
+| Oxipital AI | Pass | 4. Preliminary Diligence | 2026-04-06 | consistent — closed, and quiet since |
+| Gravity | Pass | 4. Preliminary Diligence | 2026-04-06 | consistent — closed, and quiet since |
+| Horizon Labs | Pass | 4. Preliminary Diligence | 2026-05-18 | consistent — closed, and quiet since |
+| Walden Robotics | Pass | 4. Preliminary Diligence | 2026-06-01 | consistent — closed, and quiet since |
+| TriMind | Pass | 4. Preliminary Diligence | 2026-06-01 | consistent — closed, and quiet since |
+| Kampto | Pass | 4. Preliminary Diligence | 2026-06-08 | consistent — closed, and quiet since |
+| One.Bio | Pass | 4. Preliminary Diligence | 2026-06-08 | consistent — closed, and quiet since |
+| CMatrics | Pass | 4. Preliminary Diligence | 2026-06-15 | consistent — closed, and quiet since |
+| Coral Innovations | Pass | 4. Preliminary Diligence | 2026-06-22 | consistent — closed, and quiet since |
+| Daedalus | Pass | 4. Preliminary Diligence | 2026-06-22 | consistent — closed, and quiet since |
+
+**0 companies sit at an early Affinity status (Initial Evaluation, Pre-Screen, Sourcing - No Outreach) despite reaching Deep Diligence or beyond on the slides.**
+
+_None._
+
+
+## D. Working Group vs Thesis Area
+
+Two independently sourced tags: Affinity's `working_group`, maintained by hand, against `thesis_area`, derived from the slide sub-section a company was presented under. Neither is treated as correct here — the point is to surface where they disagree so someone who knows can decide.
+
+Coverage: `working_group` on 184 of 185 cohort companies (99%) — not reported anywhere else in this report. `thesis_area` on 182 of 185 cohort companies (98%). Both present on 182 of 185 cohort companies (98%), which is the comparison set below.
+
+**They agree on 177 of 182 companies with both tags (97%).** 5 disagree.
+
+| Working Group | Human Health | Autonomous Systems | Energy & Climate | AI for Science |
+| --- | --- | --- | --- | --- |
+| Systems | 1 | 74 | 0 | 2 |
+| Climate | 0 | 1 | 63 | 0 |
+| Health | 33 | 0 | 0 | 0 |
+| Systems; Climate | 0 | 1 | 2 | 0 |
+| Climate; Systems | 0 | 0 | 1 | 1 |
+| AI for Science | 0 | 0 | 0 | 2 |
+| Health; Systems | 1 | 0 | 0 | 0 |
+
+### D1. Every disagreement
+
+| Company | Working Group (Affinity) | Thesis area (slides) | Note |
+| --- | --- | --- | --- |
+| MatNex | Climate; Systems | AI for Science | Affinity lists several groups, none of them the slide area |
+| Mattiq | Systems | AI for Science |  |
+| Micrographia Bio | Systems | Human Health |  |
+| Origins AI | Systems | AI for Science |  |
+| Phasic | Climate | Autonomous Systems |  |
+
+5 further companies carry several working groups, one of which matches the slide area; they are counted as agreeing: Blisk Dynamics (Systems; Climate), Bristol Superlight (Climate; Systems), Gravity (Systems; Climate), Marmot Energy (Systems; Climate), MintNeuro (Health; Systems).
+
+
+## E. Discussion intensity
+
+`times_discussed` counts the weeks a company was **bolded** on a slide, which is the record of it actually being talked through rather than merely listed. Every company here is in the diligence cohort, so a zero means a live diligence deal that has never had airtime.
+
+| Times discussed | Companies |
+| --- | --- |
+| 0 times | 151 of 185 cohort companies (82%) |
+| 1-2 times | 18 of 185 cohort companies (10%) |
+| 3+ times | 16 of 185 cohort companies (9%) |
+
+Coverage is total — `times_discussed` is derived for all 185 companies, so there is no missing-value case here.
+
+### E1. Top 10 by times discussed
+
+| Company | Times discussed | Furthest stage | Appearances | Last seen |
+| --- | --- | --- | --- | --- |
+| Bristol Superlight | 23 | 7. Legal Diligence / Def Docs | 27 | 2026-05-18 |
+| CorePower Magnetics | 19 | 7. Legal Diligence / Def Docs | 30 | 2026-08-24 |
+| DG Matrix | 17 | 7. Legal Diligence / Def Docs | 17 | 2026-02-17 |
+| Alithia | 11 | 5. Deep Diligence | 16 | 2026-08-24 |
+| Ovelle | 8 | 7. Legal Diligence / Def Docs | 14 | 2026-04-20 |
+| Ayo Electronics | 6 | 7. Legal Diligence / Def Docs | 6 | 2026-04-06 |
+| Numem | 6 | 5. Deep Diligence | 14 | 2026-08-31 |
+| Coral Innovations | 5 | 4. Preliminary Diligence | 7 | 2026-06-22 |
+| MatNex | 5 | 5. Deep Diligence | 8 | 2026-08-31 |
+| Skouria | 5 | 5. Deep Diligence | 21 | 2026-04-06 |
+
+### E2. Monthly discussion volume
+
+Total bolded appearances across the cohort per month — same buckets as section 3, so intake and discussion can be charted on one axis. This counts appearances, not companies: one company discussed in three months contributes three.
+
+Total: **150** bolded appearances across 185 cohort companies.
+
+| Month | Discussed appearances | Intake (first reached Prelim) |
+| --- | --- | --- |
+| 2025-10 | 12 ████████████ | 36 |
+| 2025-11 | 15 ███████████████ | 14 |
+| 2025-12 | 13 █████████████ | 4 |
+| 2026-01 | 12 ████████████ | 10 |
+| 2026-02 | 12 ████████████ | 23 |
+| 2026-03 | 19 ███████████████████ | 16 |
+| 2026-04 | 11 ███████████ | 17 |
+| 2026-05 | 16 ████████████████ | 15 |
+| 2026-06 | 16 ████████████████ | 11 |
+| 2026-07 | 12 ████████████ | 22 |
+| 2026-08 | 12 ████████████ | 17 |
+
+
+## F. Drive-folder coverage
+
+Which cohort companies EV already holds a Drive folder for, from the join `match_drive_index.py` wrote into this build — read here, not recomputed, so the two cannot disagree. Restricted to the cohort, so these are not the 982-folder numbers from the index tab. Stage is `furthest_stage_id` (`reached_*`).
+
+**83 of 185 cohort companies (45%) have a matched folder.**
+
+| Furthest stage | Companies | With a folder | Without | Ambiguous |
+| --- | --- | --- | --- | --- |
+| 4. Preliminary Diligence | 169 | 69 of 169 (41%) | 100 | 0 |
+| 5. Deep Diligence | 10 | 8 of 10 (80%) | 2 | 0 |
+| 6. Negotiate / Offer | 0 | — | — | — |
+| 7. Legal Diligence / Def Docs | 6 | 6 of 6 (100%) | 0 | 0 |
+
+Deep+ 14 of 16 Deep+ companies (88%) against Prelim-only 69 of 169 Prelim-only companies (41%).
+
+The expectation was that coverage improves with depth. It does hold here — but the Deep+ group is 16 companies, so this confirms nothing. Treat it as a count, not a trend.
+
+### F1. Deep Diligence+ with no Drive folder
+
+**2 of 16 Deep+ companies (12%).** A deal that got past Preliminary Diligence with nothing in storage under its name is the highest-priority item this report produces — either the folder exists under a spelling the join missed, or it was never created.
+
+| Company | Furthest stage | Domain | Last seen | Index verdict |
+| --- | --- | --- | --- | --- |
+| Alithia | 5. Deep Diligence | alithiapower.com | 2026-08-24 | no match |
+| CloverLeaf | 5. Deep Diligence | cloverleafbio.com | 2026-01-12 | no match |
+
 
 ## Not in this report
 

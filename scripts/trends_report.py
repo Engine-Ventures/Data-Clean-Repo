@@ -269,9 +269,14 @@ def s4_dwell(co: Cohort, today: date) -> list[str]:
         (f"- The other {of(co.n - movers, co.n)} were never seen at more than one stage, "
         "so they contribute no transition."),
         "",
-        ("**Longest current dwell** — days since the last slide appearance, for "
-        "companies whose latest stage has not changed since they entered it. "
-        f"Today is {today.isoformat()}; the series ends {co.dates[-1]}."),
+        ("**Stalled — needs attention before Monday.** These ten have gone longest "
+        "without appearing on a slide, and have not moved stage since they entered "
+        "the one they are in. Each is a live diligence deal that nobody has "
+        "reported on; the action is to either advance it, pass on it, or say why "
+        "it is still open. "
+        f"Today is {today.isoformat()}; the series ends {co.dates[-1]}, so "
+        f"{(today - date.fromisoformat(co.dates[-1])).days} days of the count below "
+        "is simply the gap since the last meeting."),
         "",
         "| Company | Stage | Entered | Last seen | Days since last seen | Meetings at stage |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -456,6 +461,480 @@ def s7_thesis(co: Cohort) -> list[str]:
     return out
 
 
+# --- A-G: advancement splits, signal, process health -----------------------
+# Everything below cuts the cohort the same way, so the split is defined once.
+# Deep+ is furthest_stage_id >= 5; Prelim-only is furthest_stage_id == 4. Both
+# are `reached_*` semantics -- where a company got to, not where it sits now.
+
+SMALL_SAMPLE = 20
+
+
+def split(co: Cohort) -> tuple[list[dict], list[dict]]:
+    return co.reached(5), [c for c in co.companies if (c["furthest"] or 0) == 4]
+
+
+def small_sample_note(deep: list[dict], prelim: list[dict]) -> list[str]:
+    """Said before any percentage, not after it."""
+    if len(deep) >= SMALL_SAMPLE:
+        return []
+    return [
+        (f"> **Read the Deep+ percentages with care.** That group is {len(deep)} "
+         f"companies against {len(prelim)} at Preliminary Diligence only. At "
+         f"n={len(deep)}, one company moves a share by "
+         f"{1 / len(deep):.0%}, so a gap between the two columns is not a signal "
+         "on its own. The counts are exact; the percentages are fragile."),
+        "",
+    ]
+
+
+def low_coverage_note(covered: int, total: int, what: str) -> list[str]:
+    """Directly above the table it applies to, never in a footnote."""
+    if not total or covered / total >= 0.30:
+        return []
+    return [
+        (f"> **Coverage is {pct(covered, total)}** — {what} is recorded for only "
+         f"{covered} of {total} here. The distribution below describes those "
+         f"{covered}, and cannot be extrapolated to the rest."),
+        "",
+    ]
+
+
+def split_table(co: Cohort, field: str, label: str, order: list[str] | None = None,
+                value_of=None) -> list[str]:
+    """One distribution, Deep+ beside Prelim-only, each with its own coverage.
+
+    Every value seen on either side gets a row on both sides, so a category
+    present in one group and absent from the other reads as an explicit 0
+    rather than a missing line.
+    """
+    deep, prelim = split(co)
+    pick = value_of or (lambda c: field_map(c).get(field))
+
+    def counts(group):
+        c: Counter = Counter()
+        for e in group:
+            v = pick(e)
+            if v not in (None, ""):
+                c[str(v)] += 1
+        return c
+
+    dc, pc = counts(deep), counts(prelim)
+    d_cov, p_cov = sum(dc.values()), sum(pc.values())
+
+    keys = set(dc) | set(pc)
+    ordered = [k for k in (order or []) if k in keys] + sorted(keys - set(order or []))
+
+    out = small_sample_note(deep, prelim)
+    out += low_coverage_note(d_cov + p_cov, co.n, f"`{field}`")
+    out += [
+        (f"Coverage is reported per group, not pooled: "
+         f"**Deep+ {of(d_cov, len(deep), 'Deep+ companies')}**, "
+         f"**Prelim-only {of(p_cov, len(prelim), 'Prelim-only companies')}**."),
+        "",
+        (f"| {label} | Deep+ (n={len(deep)}) | share of Deep+ with a value | "
+        f"Prelim-only (n={len(prelim)}) | share of Prelim-only with a value |"),
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for k in ordered:
+        out.append(
+            f"| {k} | {dc.get(k, 0)} | {pct(dc.get(k, 0), d_cov)} | "
+            f"{pc.get(k, 0)} | {pct(pc.get(k, 0), p_cov)} |"
+        )
+    out.append(
+        f"| _no value_ | {len(deep) - d_cov} | — | {len(prelim) - p_cov} | — |"
+    )
+    return [*out, ""]
+
+
+def sa_advancement(co: Cohort) -> list[str]:
+    deep, prelim = split(co)
+    out = [
+        "## A. Advancement splits", "",
+        (f"Every distribution below is cut two ways: **Deep+** — reached Deep "
+         f"Diligence or further, `furthest_stage_id >= 5`, {len(deep)} companies — "
+         f"against **Prelim-only** — `furthest_stage_id == 4`, {len(prelim)} "
+         "companies. Both are `reached_*` semantics. The two groups' coverage rates "
+         "are computed and reported separately; neither is applied to the other."),
+        "",
+        "### A1. Region (`hq_region`)", "",
+    ]
+    out += split_table(co, "hq_region", "Region")
+    out += ["### A2. Country (`hq_country`)", ""]
+    out += split_table(co, "hq_country", "Country")
+    out += [
+        "### A3. Round stage (`stage`)", "",
+        ("> **Still not `funding_round.round_stage`.** As in section 5, this is the "
+         "`stage` field_value — Affinity's current round — because `funding_round` "
+         "lives only in `data/pipeline.db`, which still cannot be built. Do not "
+         "read this as a funding_round split."),
+        "",
+    ]
+    out += split_table(co, "stage", "Round", ROUND_ORDER)
+    return out
+
+
+def sb_signal(co: Cohort) -> list[str]:
+    out = [
+        "## B. Internal signal vs advancement", "",
+        ("Do the team's own scores and Affinity's Interest flag track with getting "
+         "deeper? Same Deep+ / Prelim-only split as section A. This is a two-group "
+         "comparison to read in a room, **not** a regression: no correlation "
+         "coefficient is computed and no significance is claimed. At these coverage "
+         "levels none of it would survive one anyway."),
+        "",
+    ]
+    fields = (
+        ("interest", "Interest", ["1. Very High", "2. High", "3. Moderate",
+                                  "4. Low", "5. Propose Pass"]),
+        ("score_team", "Team score", ["+++", "++", "+"]),
+        ("score_tech", "Tech score", ["+++", "++", "+"]),
+        ("score_oppt", "Opportunity score", ["+++", "++", "+"]),
+    )
+    for i, (field, label, order) in enumerate(fields, start=1):
+        out += [f"### B{i}. {label} (`{field}`)", ""]
+        out += split_table(co, field, label, order)
+    return out
+
+
+# Affinity statuses that assert the deal is over, and those that assert it never
+# really started. Either is a contradiction when the slides still show diligence.
+CLOSED_STATUS = {"Pass", "Loss"}
+EARLY_STATUS = {"Sourcing - No Outreach", "Pre-Screen", "Initial Evaluation"}
+
+# How close to the end of the slide series a company must have appeared for a
+# closed Affinity status to read as a live contradiction rather than history.
+RECENT_DAYS = 56
+
+
+def sc_status(co: Cohort) -> list[str]:
+    have = [(c, str(field_map(c).get("affinity_status")))
+            for c in co.companies if field_map(c).get("affinity_status")]
+    covered = len(have)
+
+    grid: dict[str, Counter] = defaultdict(Counter)
+    for c, s in have:
+        grid[s][c["furthest"] or 0] += 1
+
+    out = [
+        "## C. Affinity Status vs slide-derived stage", "",
+        ("A process-health check, not a data question: Affinity's `Status` is "
+         "maintained by hand, the slide stage is derived from what was presented. "
+         "Where they contradict each other, one of the two is out of date. Stage "
+         "columns are `furthest_stage_id` (`reached_*`)."),
+        "",
+    ]
+    out += low_coverage_note(covered, co.n, "`affinity_status`")
+    out += [
+        f"Coverage: {of(covered, co.n)} have an Affinity Status.",
+        "",
+        "| Affinity Status | " + " | ".join(f"{s}. {STAGE_NAME[s]}" for s in STAGES)
+        + " | Total |",
+        "| --- | " + " | ".join("---" for _ in STAGES) + " | --- |",
+    ]
+    for s in sorted(grid, key=lambda k: -sum(grid[k].values())):
+        row = grid[s]
+        tot = sum(row.values())
+        cells = " | ".join(str(row.get(st, 0)) for st in STAGES)
+        out.append(f"| {s} | {cells} | {tot} |")
+    out += [
+        "| _no status_ | " + " | ".join(
+            str(sum(1 for c in co.companies
+                    if not field_map(c).get("affinity_status")
+                    and (c["furthest"] or 0) == st)) for st in STAGES)
+        + f" | {co.n - covered} |",
+        "",
+    ]
+
+    # --- the action list ---
+    # "Pass" against a company last seen ten months ago is not a contradiction --
+    # it is a pass that happened. What needs a person is a closed status on a deal
+    # the slides still show moving: recently on a slide, or deep in the funnel.
+    # Both tiers are listed, because the boundary is a judgement, but the count
+    # that leads the section is the one worth acting on.
+    end = date.fromisoformat(co.dates[-1])
+    closed = [(c, s) for c, s in have if s in CLOSED_STATUS]
+    early = [(c, s) for c, s in have if s in EARLY_STATUS and (c["furthest"] or 0) >= 5]
+
+    def why(c) -> str:
+        deep = (c["furthest"] or 0) >= 5
+        recent = c["last"] and (end - date.fromisoformat(c["last"])).days <= RECENT_DAYS
+        if deep and recent:
+            return "**still active, and past Prelim**"
+        if deep:
+            return "**reached Deep+ after being closed**"
+        if recent:
+            return f"**still on slides within {RECENT_DAYS} days of the last meeting**"
+        return "consistent — closed, and quiet since"
+
+    live = [(c, s) for c, s in closed if not why(c).startswith("consistent")]
+
+    out += [
+        "### C1. Contradictions to resolve", "",
+        (f"{len(closed)} cohort companies carry "
+         f"{' or '.join(sorted(CLOSED_STATUS))} in Affinity. Most of those are not "
+         "contradictions — a company that was passed on and has not been presented "
+         "since is a record working correctly, so listing all 46 as actions would "
+         "bury the real ones."),
+        "",
+        (f"**{len(live)} need a person.** Either they reached Deep Diligence or "
+         f"beyond *after* being closed, or they were still appearing on slides "
+         f"within {RECENT_DAYS} days of the last meeting ({co.dates[-1]}) — in both "
+         "cases Affinity says the deal is dead and the slides say it is not."),
+        "",
+    ]
+    if closed:
+        out += ["| Company | Affinity Status | Furthest stage | Last seen | Why flagged |",
+                "| --- | --- | --- | --- | --- |"]
+        # Genuine contradictions first; within each, deepest and most recent first.
+        for c, s in sorted(closed, key=lambda x: (
+                why(x[0]).startswith("consistent"),
+                -(x[0]["furthest"] or 0),
+                x[0]["last"] or "",
+        ), reverse=False):
+            st = c["furthest"] or 0
+            out.append(f"| {c['name']} | {s} | {st}. {STAGE_NAME.get(st, st)} | "
+                       f"{c['last'] or '—'} | {why(c)} |")
+        out.append("")
+
+    out += [
+        (f"**{len(early)} companies sit at an early Affinity status "
+         f"({', '.join(sorted(EARLY_STATUS))}) despite reaching Deep Diligence or "
+         "beyond on the slides.**"),
+        "",
+    ]
+    if early:
+        out += ["| Company | Affinity Status | Furthest stage | Last seen |",
+                "| --- | --- | --- | --- |"]
+        for c, s in sorted(early, key=lambda x: x[0]["name"]):
+            st = c["furthest"] or 0
+            out.append(f"| {c['name']} | {s} | {st}. {STAGE_NAME.get(st, st)} | "
+                       f"{c['last'] or '—'} |")
+    else:
+        out.append("_None._")
+    return [*out, ""]
+
+
+# Affinity's Working Group vocabulary against the slide thesis vocabulary. The
+# mapping is naming only -- it does not adjudicate which tag is correct.
+WG_TO_THESIS = {
+    "Systems": "Autonomous Systems",
+    "Climate": "Energy & Climate",
+    "Health": "Human Health",
+    "AI for Science": "AI for Science",
+}
+
+
+def sd_working_group(co: Cohort) -> list[str]:
+    rows = []
+    for c in co.companies:
+        f = field_map(c)
+        wg, th = f.get("working_group"), f.get("thesis_area")
+        if not wg or not th:
+            continue
+        groups = [g.strip() for g in str(wg).split(";") if g.strip()]
+        mapped = [WG_TO_THESIS.get(g, g) for g in groups]
+        rows.append((c, str(wg), str(th), str(th) in mapped, len(groups) > 1))
+
+    wg_cov = sum(1 for c in co.companies if field_map(c).get("working_group"))
+    both = len(rows)
+    agree = sum(1 for *_, ok, _ in rows if ok)
+    disagree = [r for r in rows if not r[3]]
+
+    out = [
+        "## D. Working Group vs Thesis Area", "",
+        ("Two independently sourced tags: Affinity's `working_group`, maintained by "
+         "hand, against `thesis_area`, derived from the slide sub-section a company "
+         "was presented under. Neither is treated as correct here — the point is to "
+         "surface where they disagree so someone who knows can decide."),
+        "",
+        (f"Coverage: `working_group` on {of(wg_cov, co.n)} — not reported anywhere "
+         f"else in this report. `thesis_area` on "
+         f"{of(sum(1 for c in co.companies if field_map(c).get('thesis_area')), co.n)}. "
+         f"Both present on {of(both, co.n)}, which is the comparison set below."),
+        "",
+        (f"**They agree on {of(agree, both, 'companies with both tags')}.** "
+        f"{len(disagree)} disagree."),
+        "",
+        "| Working Group | " + " | ".join(THESIS_ORDER) + " |",
+        "| --- | " + " | ".join("---" for _ in THESIS_ORDER) + " |",
+    ]
+    grid: dict[str, Counter] = defaultdict(Counter)
+    for _c, wg, th, _ok, _multi in rows:
+        grid[wg][th] += 1
+    for wg in sorted(grid, key=lambda k: -sum(grid[k].values())):
+        cells = " | ".join(str(grid[wg].get(t, 0)) for t in THESIS_ORDER)
+        out.append(f"| {wg} | {cells} |")
+
+    out += ["", "### D1. Every disagreement", ""]
+    if disagree:
+        out += ["| Company | Working Group (Affinity) | Thesis area (slides) | Note |",
+                "| --- | --- | --- | --- |"]
+        for c, wg, th, _, multi in sorted(disagree, key=lambda r: r[0]["name"]):
+            note = "Affinity lists several groups, none of them the slide area" if multi else ""
+            out.append(f"| {c['name']} | {wg} | {th} | {note} |")
+    else:
+        out.append("_None._")
+
+    multi_ok = [r for r in rows if r[3] and r[4]]
+    if multi_ok:
+        out += ["",
+                (f"{len(multi_ok)} further companies carry several working groups, one "
+                 "of which matches the slide area; they are counted as agreeing: "
+                 + ", ".join(f"{c['name']} ({wg})" for c, wg, *_ in
+                             sorted(multi_ok, key=lambda r: r[0]["name"])) + ".")]
+    return [*out, ""]
+
+
+def se_discussion(co: Cohort) -> list[str]:
+    buckets = {"0 times": 0, "1-2 times": 0, "3+ times": 0}
+    for c in co.companies:
+        t = c["times"] or 0
+        buckets["0 times" if t == 0 else "1-2 times" if t <= 2 else "3+ times"] += 1
+
+    out = [
+        "## E. Discussion intensity", "",
+        ("`times_discussed` counts the weeks a company was **bolded** on a slide, "
+         "which is the record of it actually being talked through rather than "
+         "merely listed. Every company here is in the diligence cohort, so a zero "
+         "means a live diligence deal that has never had airtime."),
+        "",
+        "| Times discussed | Companies |",
+        "| --- | --- |",
+    ]
+    for k, n in buckets.items():
+        out.append(f"| {k} | {of(n, co.n)} |")
+
+    ranked = sorted(co.companies, key=lambda c: (-(c["times"] or 0), c["name"]))
+    out += [
+        "",
+        (f"Coverage is total — `times_discussed` is derived for all "
+         f"{co.n} companies, so there is no missing-value case here."),
+        "",
+        "### E1. Top 10 by times discussed", "",
+        "| Company | Times discussed | Furthest stage | Appearances | Last seen |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for c in ranked[:10]:
+        st = c["furthest"] or 0
+        out.append(f"| {c['name']} | {c['times'] or 0} | {st}. {STAGE_NAME.get(st, st)} "
+                   f"| {c['appearances']} | {c['last'] or '—'} |")
+
+    # Monthly bold volume, on the same buckets as section 3 so the two chart together.
+    by_month: Counter = Counter()
+    for c in co.companies:
+        weeks = {wi for wi, _stage, bold, *_ in c["obs"] if bold}
+        for wi in weeks:
+            by_month[co.dates[wi][:7]] += 1
+    total_bold = sum(by_month.values())
+
+    out += [
+        "",
+        "### E2. Monthly discussion volume", "",
+        ("Total bolded appearances across the cohort per month — same buckets as "
+         "section 3, so intake and discussion can be charted on one axis. This "
+         "counts appearances, not companies: one company discussed in three months "
+         "contributes three."),
+        "",
+        f"Total: **{total_bold}** bolded appearances across {co.n} cohort companies.",
+        "",
+        "| Month | Discussed appearances | Intake (first reached Prelim) |",
+        "| --- | --- | --- |",
+    ]
+    intake: Counter = Counter()
+    for c in co.companies:
+        d = co.first_at_or_above(c["id"], 4)
+        if d:
+            intake[d[:7]] += 1
+    for m in sorted(set(by_month) | set(intake)):
+        if m < INTAKE_FROM:
+            continue
+        b = by_month.get(m, 0)
+        out.append(f"| {m} | {b} {'█' * b} | {intake.get(m, 0)} |")
+    return [*out, ""]
+
+
+def sf_folders(co: Cohort) -> list[str]:
+    """Drive-folder coverage from the payload's `idx`, restricted to the cohort.
+
+    match_drive_index.py already wrote a per-company verdict into the payload, so
+    this reads that rather than re-running the name ladder -- one join definition,
+    as the rest of the pipeline does it.
+    """
+    def matched(c):
+        return bool(c.get("idx")) and c["idx"].get("tier") != "ambiguous"
+
+    def ambiguous(c):
+        return bool(c.get("idx")) and c["idx"].get("tier") == "ambiguous"
+
+    if not any("idx" in c for c in co.companies):
+        return ["## F. Drive-folder coverage", "",
+                ("_No index join in this build. Run "
+                 "`python scripts/match_drive_index.py` first._"), ""]
+
+    hits = [c for c in co.companies if matched(c)]
+    out = [
+        "## F. Drive-folder coverage", "",
+        ("Which cohort companies EV already holds a Drive folder for, from the join "
+         "`match_drive_index.py` wrote into this build — read here, not recomputed, "
+         "so the two cannot disagree. Restricted to the cohort, so these are not the "
+         "982-folder numbers from the index tab. Stage is `furthest_stage_id` "
+         "(`reached_*`)."),
+        "",
+        f"**{of(len(hits), co.n)} have a matched folder.**",
+        "",
+        "| Furthest stage | Companies | With a folder | Without | Ambiguous |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for s in STAGES:
+        grp = [c for c in co.companies if (c["furthest"] or 0) == s]
+        if not grp:
+            out.append(f"| {s}. {STAGE_NAME[s]} | 0 | — | — | — |")
+            continue
+        y = sum(1 for c in grp if matched(c))
+        a = sum(1 for c in grp if ambiguous(c))
+        out.append(f"| {s}. {STAGE_NAME[s]} | {len(grp)} | {y} of {len(grp)} "
+                   f"({pct(y, len(grp))}) | {len(grp) - y - a} | {a} |")
+
+    deep, prelim = split(co)
+    d_hit = sum(1 for c in deep if matched(c))
+    p_hit = sum(1 for c in prelim if matched(c))
+    out += [
+        "",
+        (f"Deep+ {of(d_hit, len(deep), 'Deep+ companies')} against Prelim-only "
+         f"{of(p_hit, len(prelim), 'Prelim-only companies')}."),
+        "",
+    ]
+    # The expectation was that folder coverage improves with depth. Say which way
+    # it actually went rather than leaving the reader to compare two percentages.
+    if len(deep) < SMALL_SAMPLE:
+        holds = (d_hit / max(len(deep), 1)) > (p_hit / max(len(prelim), 1))
+        out += [(f"The expectation was that coverage improves with depth. It does "
+                 f"{'hold' if holds else 'not hold'} "
+                 f"here — but the Deep+ group is {len(deep)} companies, so this "
+                 "confirms nothing. Treat it as a count, not a trend."), ""]
+
+    no_folder = [c for c in deep if not matched(c)]
+    out += [
+        "### F1. Deep Diligence+ with no Drive folder", "",
+        (f"**{of(len(no_folder), len(deep), 'Deep+ companies')}.** A deal that got "
+         "past Preliminary Diligence with nothing in storage under its name is the "
+         "highest-priority item this report produces — either the folder exists "
+         "under a spelling the join missed, or it was never created."),
+        "",
+    ]
+    if no_folder:
+        out += ["| Company | Furthest stage | Domain | Last seen | Index verdict |",
+                "| --- | --- | --- | --- | --- |"]
+        for c in sorted(no_folder, key=lambda c: (-(c["furthest"] or 0), c["name"])):
+            st = c["furthest"] or 0
+            v = "ambiguous — matches several folders" if ambiguous(c) else "no match"
+            out.append(f"| {c['name']} | {st}. {STAGE_NAME.get(st, st)} | "
+                       f"{c['domain'] or '—'} | {c['last'] or '—'} | {v} |")
+    else:
+        out.append("_None — every Deep+ company has a folder._")
+    return [*out, ""]
+
+
 def notes() -> list[str]:
     return [
         "## Not in this report", "",
@@ -488,7 +967,10 @@ def build(co: Cohort, today: date, src: Path) -> str:
     parts = [
         head,
         s1_funnel(co), s2_conversion(co), s3_intake(co), s4_dwell(co, today),
-        s5_round(co), s6_geography(co), s7_thesis(co), notes(),
+        s5_round(co), s6_geography(co), s7_thesis(co),
+        sa_advancement(co), sb_signal(co), sc_status(co), sd_working_group(co),
+        se_discussion(co), sf_folders(co),
+        notes(),
     ]
     return "\n".join("\n".join(part) + "\n" for part in parts)
 
